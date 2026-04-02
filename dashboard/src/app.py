@@ -59,6 +59,29 @@ def get_clients(cloud: str = "", region: str = ""):
 REPORT_NAMESPACE = os.getenv("REPORT_NAMESPACE", "atlas")
 EXCLUDE_NAMESPACES = os.getenv("EXCLUDE_NAMESPACES", "kube-system,kube-public,kube-node-lease").split(",")
 
+# ============================================
+# Response Cache — reduces K8s API calls
+# ============================================
+import time as _time
+
+_cache = {}
+CACHE_TTL = 15  # seconds
+
+
+def cached(key, ttl=CACHE_TTL):
+    """Get cached value if fresh."""
+    if key in _cache:
+        val, ts = _cache[key]
+        if _time.time() - ts < ttl:
+            return val
+    return None
+
+
+def set_cache(key, value, ttl=CACHE_TTL):
+    """Store value in cache."""
+    _cache[key] = (value, _time.time())
+    return value
+
 
 def get_k8s_clients():
     try:
@@ -190,6 +213,13 @@ async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Op
             "no_cluster_region": selected_region,
         })
 
+    cache_key = f"dashboard:{selected_cloud}:{selected_region}:{namespace}"
+    cached_data = cached(cache_key)
+    if cached_data:
+        cached_data["request"] = request
+        cached_data["user"] = user
+        return templates.TemplateResponse("dashboard.html", cached_data)
+
     namespaces = [
         ns.metadata.name for ns in c_v1.list_namespace().items
         if ns.metadata.name not in EXCLUDE_NAMESPACES
@@ -217,8 +247,7 @@ async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Op
 
     reports = _get_reports(namespace)
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    template_data = {
         "namespaces": namespaces,
         "selected_namespace": namespace or "",
         "total": total,
@@ -229,15 +258,26 @@ async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Op
         "issues": issues,
         "reports": reports,
         "pods": pods_data,
-        "user": user,
         "no_cluster": False,
         "no_cluster_cloud": "",
         "no_cluster_region": "",
+    }
+    set_cache(cache_key, template_data)
+
+    return templates.TemplateResponse("dashboard.html", {
+        **template_data,
+        "request": request,
+        "user": user,
     })
 
 
 @app.get("/api/pods")
 async def api_pods(namespace: Optional[str] = None, cloud: Optional[str] = None, region: Optional[str] = None):
+    cache_key = f"pods:{cloud}:{region}:{namespace}"
+    cached_result = cached(cache_key)
+    if cached_result is not None:
+        return cached_result
+
     c_v1, _ = get_clients(cloud or "", region or "")
     if c_v1 is None:
         return []
@@ -253,7 +293,7 @@ async def api_pods(namespace: Optional[str] = None, cloud: Optional[str] = None,
                 pods_data.append(classify_pod(pod))
         except Exception:
             pass
-    return pods_data
+    return set_cache(cache_key, pods_data)
 
 
 @app.get("/api/reports")
@@ -609,6 +649,9 @@ async def spot_dashboard(request: Request):
 async def spot_status(request: Request):
     if not auth.is_authenticated(request):
         return JSONResponse({"success": False}, status_code=401)
+    cached_result = cached("spot-status", ttl=30)
+    if cached_result:
+        return cached_result
     try:
         from .spot_manager import SpotManager
         sm = SpotManager(core_v1, apps_v1)
@@ -644,11 +687,15 @@ async def costs_dashboard(request: Request):
 async def cost_breakdown(request: Request):
     if not auth.is_authenticated(request):
         return JSONResponse({"success": False}, status_code=401)
+    cached_result = cached("cost-breakdown", ttl=30)
+    if cached_result:
+        return cached_result
     try:
         from .cost_attribution import CostAttribution
         ca = CostAttribution(core_v1, apps_v1)
         data = ca.get_full_breakdown()
-        return {"success": True, **data}
+        result = {"success": True, **data}
+        return set_cache("cost-breakdown", result, ttl=30)
     except Exception as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
@@ -871,11 +918,18 @@ async def node_replace(request: Request):
 async def api_multi_cloud(request: Request):
     if not auth.is_authenticated(request):
         return JSONResponse({"success": False}, status_code=401)
+
+    cached_result = cached("multi-cloud", ttl=60)
+    if cached_result:
+        return cached_result
+
     try:
         from .multi_cloud import MultiCloudManager
         mgr = MultiCloudManager()
         mgr.discover_all()
-        return {"success": True, "clusters": mgr.list_all()}
+        result = {"success": True, "clusters": mgr.list_all()}
+        set_cache("multi-cloud", result, ttl=60)
+        return result
     except Exception as e:
         return {"success": True, "clusters": [], "error": str(e)}
 

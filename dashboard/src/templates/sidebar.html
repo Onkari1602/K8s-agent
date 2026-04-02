@@ -1,172 +1,218 @@
-<!-- Claude-style Sidebar -->
+<!-- AWS Console-style Sidebar -->
 <style>
+    :root {
+        --aws-navy: #232f3e;
+        --aws-dark: #1a242f;
+        --aws-darker: #131920;
+        --aws-orange: #ff9900;
+        --aws-orange-hover: #ec7211;
+        --aws-text: #d5dbdb;
+        --aws-text-light: #879596;
+        --aws-border: #2a3a4a;
+        --aws-active-bg: #1a3a5c;
+        --aws-hover-bg: #283848;
+        --aws-white: #fafafa;
+        --aws-content-bg: #f2f3f3;
+        --aws-card-bg: #ffffff;
+    }
+
+    body { background: var(--aws-content-bg); color: #16191f; font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; }
+
+    /* Top Bar */
+    .aws-topbar {
+        position: fixed; top: 0; left: 0; right: 0; height: 48px;
+        background: var(--aws-navy); z-index: 300; display: flex;
+        align-items: center; padding: 0 16px; border-bottom: 1px solid #394858;
+    }
+    .aws-topbar-menu { cursor: pointer; color: var(--aws-text); font-size: 20px; padding: 8px 12px; border-radius: 4px; }
+    .aws-topbar-menu:hover { background: var(--aws-hover-bg); }
+    .aws-topbar-logo { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
+    .aws-topbar-logo .cube { width: 24px; height: 24px; background: var(--aws-orange); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; }
+    .aws-topbar-logo .name { color: var(--aws-text); font-size: 15px; font-weight: 600; }
+    .aws-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .aws-topbar-right .region { background: var(--aws-hover-bg); color: var(--aws-text); padding: 4px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--aws-border); }
+    .aws-topbar-right .user-btn { color: var(--aws-text); font-size: 12px; padding: 4px 10px; border-radius: 4px; text-decoration: none; }
+    .aws-topbar-right .user-btn:hover { background: var(--aws-hover-bg); }
+    .aws-topbar-right .signout { color: var(--aws-orange); font-size: 12px; text-decoration: none; padding: 4px 10px; }
+    .aws-topbar-right .signout:hover { text-decoration: underline; }
+
+    /* Sidebar */
     .sidebar {
-        position: fixed; left: 0; top: 0; height: 100vh; width: 52px;
-        background: #171717; border-right: 1px solid #2a2a2a;
-        z-index: 200; transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        overflow: hidden; display: flex; flex-direction: column;
+        position: fixed; left: -260px; top: 48px; height: calc(100vh - 48px); width: 260px;
+        background: var(--aws-dark); z-index: 200; transition: left 0.25s ease;
+        overflow-y: auto; border-right: 1px solid var(--aws-border);
     }
-    .sidebar:hover, .sidebar.pinned { width: 250px; }
+    .sidebar.open { left: 0; }
+    .sidebar::-webkit-scrollbar { width: 6px; }
+    .sidebar::-webkit-scrollbar-thumb { background: #3a4a5a; border-radius: 3px; }
 
-    .sidebar-top {
-        padding: 12px; display: flex; align-items: center; gap: 10px;
-        border-bottom: 1px solid #2a2a2a; min-height: 52px;
+    .sidebar-search { padding: 10px 12px; }
+    .sidebar-search input {
+        width: 100%; padding: 6px 10px; background: var(--aws-darker); border: 1px solid var(--aws-border);
+        border-radius: 4px; color: var(--aws-text); font-size: 13px; outline: none;
     }
-    .sidebar-logo { width: 28px; height: 28px; background: #3b82f6; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: white; flex-shrink: 0; }
-    .sidebar-brand { font-size: 14px; font-weight: 600; color: #f5f5f5; white-space: nowrap; opacity: 0; transition: opacity 0.2s; }
-    .sidebar:hover .sidebar-brand, .sidebar.pinned .sidebar-brand { opacity: 1; }
+    .sidebar-search input:focus { border-color: var(--aws-orange); }
+    .sidebar-search input::placeholder { color: var(--aws-text-light); }
 
-    .sidebar-pin {
-        position: absolute; right: 10px; top: 15px; cursor: pointer;
-        color: #666; font-size: 14px; opacity: 0; transition: opacity 0.2s;
-        background: none; border: none; padding: 4px;
+    .nav-group { padding: 4px 0; }
+    .nav-group-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+        color: var(--aws-text-light); padding: 10px 16px 4px; user-select: none;
     }
-    .sidebar:hover .sidebar-pin, .sidebar.pinned .sidebar-pin { opacity: 1; }
-    .sidebar.pinned .sidebar-pin { color: #3b82f6; }
-
-    .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 6px; }
-    .sidebar-nav::-webkit-scrollbar { width: 4px; }
-    .sidebar-nav::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-
-    .nav-section { padding: 4px 0; }
-    .nav-label {
-        font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-        color: #555; padding: 8px 12px 4px; white-space: nowrap;
-        opacity: 0; transition: opacity 0.2s;
-    }
-    .sidebar:hover .nav-label, .sidebar.pinned .nav-label { opacity: 1; }
 
     .nav-item {
         display: flex; align-items: center; gap: 10px;
-        padding: 8px 12px; margin: 1px 0; border-radius: 8px;
-        color: #999; text-decoration: none; font-size: 13px;
-        white-space: nowrap; transition: all 0.15s; cursor: pointer;
+        padding: 7px 16px; color: var(--aws-text); text-decoration: none;
+        font-size: 13px; transition: all 0.1s; border-left: 3px solid transparent;
     }
-    .nav-item:hover { background: #222; color: #e5e5e5; }
-    .nav-item.active { background: #1e3a5f; color: #60a5fa; }
-    .nav-icon { font-size: 16px; min-width: 20px; text-align: center; flex-shrink: 0; }
-    .nav-text { opacity: 0; transition: opacity 0.2s; font-weight: 400; }
-    .sidebar:hover .nav-text, .sidebar.pinned .nav-text { opacity: 1; }
+    .nav-item:hover { background: var(--aws-hover-bg); color: #fff; }
+    .nav-item.active { background: var(--aws-active-bg); color: #fff; border-left-color: var(--aws-orange); }
+    .nav-icon { font-size: 14px; min-width: 18px; text-align: center; }
 
-    .nav-divider { height: 1px; background: #2a2a2a; margin: 6px 12px; }
+    .nav-divider { height: 1px; background: var(--aws-border); margin: 6px 16px; }
 
-    .sidebar-footer {
-        padding: 10px 12px; border-top: 1px solid #2a2a2a;
-        display: flex; align-items: center; gap: 10px;
+    /* Overlay */
+    .sidebar-overlay { display: none; position: fixed; top: 48px; left: 0; width: 100%; height: calc(100vh - 48px); background: rgba(0,0,0,0.4); z-index: 199; }
+    .sidebar.open ~ .sidebar-overlay { display: block; }
+
+    /* Main Content */
+    .main-content { margin-top: 48px; padding: 20px 24px; min-height: calc(100vh - 48px); }
+
+    /* Override page-level styles for AWS look */
+    .header { background: var(--aws-card-bg) !important; border: 1px solid #d5dbdb !important; border-radius: 8px; padding: 16px 20px !important; margin-bottom: 16px; color: #16191f !important; }
+    .header h1 { color: #16191f !important; font-size: 22px !important; font-weight: 700 !important; }
+
+    .stats .stat-card, .stats .stat, .stat { background: var(--aws-card-bg) !important; border: 1px solid #d5dbdb !important; border-radius: 8px !important; color: #16191f !important; }
+    .stat .num, .stat-card .number, .stat .number { color: #16191f !important; }
+    .stat .lbl, .stat-card .label, .stat .label { color: #687078 !important; }
+
+    .card, .table-wrap, .result-card { background: var(--aws-card-bg) !important; border: 1px solid #d5dbdb !important; border-radius: 8px !important; color: #16191f !important; }
+    .card h3 { color: #16191f !important; border-bottom-color: #d5dbdb !important; }
+
+    table th { background: #fafafa !important; color: #545b64 !important; border-bottom: 1px solid #d5dbdb !important; }
+    table td { border-bottom: 1px solid #eaeded !important; color: #16191f !important; }
+    table tr:hover { background: #f7f8f8 !important; }
+
+    .container { max-width: 1400px; margin: 0 auto; }
+
+    .btn, .run-btn, .resolve-btn {
+        background: var(--aws-orange) !important; color: #16191f !important;
+        border: none !important; border-radius: 4px !important; font-weight: 700 !important;
     }
-    .user-avatar {
-        width: 28px; height: 28px; border-radius: 50%; background: #333;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 11px; color: #999; flex-shrink: 0; font-weight: 600;
-    }
-    .user-info-box { opacity: 0; transition: opacity 0.2s; white-space: nowrap; overflow: hidden; }
-    .sidebar:hover .user-info-box, .sidebar.pinned .user-info-box { opacity: 1; }
-    .user-email { font-size: 12px; color: #999; }
-    .user-logout { font-size: 11px; color: #ef4444; text-decoration: none; }
-    .user-logout:hover { color: #f87171; }
+    .btn:hover, .run-btn:hover, .resolve-btn:hover { background: var(--aws-orange-hover) !important; }
 
-    /* Main content offset */
-    .main-content { margin-left: 52px; transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-    .sidebar.pinned ~ .main-content { margin-left: 250px; }
+    .tab { background: var(--aws-card-bg) !important; border: 1px solid #d5dbdb !important; color: #545b64 !important; }
+    .tab.active { color: var(--aws-orange) !important; border-bottom-color: var(--aws-orange) !important; font-weight: 600; }
+
+    .badge { border-radius: 4px !important; }
+
+    /* AWS-style breadcrumb */
+    .aws-breadcrumb { font-size: 12px; color: #545b64; margin-bottom: 12px; }
+    .aws-breadcrumb a { color: #0073bb; text-decoration: none; }
+    .aws-breadcrumb a:hover { text-decoration: underline; }
 
     @media (max-width: 768px) {
-        .sidebar { width: 0; border: none; }
-        .sidebar:hover, .sidebar.pinned { width: 250px; border-right: 1px solid #2a2a2a; }
-        .main-content { margin-left: 0 !important; }
-        .mobile-toggle { display: block !important; }
-    }
-
-    .mobile-toggle {
-        display: none; position: fixed; top: 12px; left: 12px; z-index: 201;
-        background: #171717; border: 1px solid #2a2a2a; border-radius: 8px;
-        padding: 8px 12px; color: #999; font-size: 18px; cursor: pointer;
+        .main-content { padding: 12px; }
+        .aws-topbar-logo .name { display: none; }
     }
 </style>
 
-<div class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('pinned')">&#9776;</div>
-
-<div class="sidebar" id="sidebar">
-    <div class="sidebar-top">
-        <div class="sidebar-logo">K</div>
-        <span class="sidebar-brand">K8s Healing Agent</span>
-        <button class="sidebar-pin" onclick="togglePin()" title="Pin sidebar">&#128204;</button>
+<!-- Top Bar -->
+<div class="aws-topbar">
+    <div class="aws-topbar-menu" onclick="toggleSidebar()">&#9776;</div>
+    <div class="aws-topbar-logo">
+        <div class="cube">K8</div>
+        <span class="name">K8s Healing Agent</span>
     </div>
-
-    <div class="sidebar-nav">
-        <div class="nav-section">
-            <div class="nav-label">Monitor</div>
-            <a href="/" class="nav-item {% if active == 'dashboard' %}active{% endif %}">
-                <span class="nav-icon">&#128202;</span><span class="nav-text">Dashboard</span>
-            </a>
-        </div>
-
-        <div class="nav-divider"></div>
-
-        <div class="nav-section">
-            <div class="nav-label">Cost</div>
-            <a href="/cost" class="nav-item {% if active == 'cost' %}active{% endif %}">
-                <span class="nav-icon">&#128176;</span><span class="nav-text">Cost Optimizer</span>
-            </a>
-            <a href="/costs" class="nav-item {% if active == 'costs' %}active{% endif %}">
-                <span class="nav-icon">&#128200;</span><span class="nav-text">Cost Visibility</span>
-            </a>
-            <a href="/nodes" class="nav-item {% if active == 'nodes' %}active{% endif %}">
-                <span class="nav-icon">&#128421;</span><span class="nav-text">Node Optimizer</span>
-            </a>
-        </div>
-
-        <div class="nav-divider"></div>
-
-        <div class="nav-section">
-            <div class="nav-label">Optimize</div>
-            <a href="/optimizer" class="nav-item {% if active == 'optimizer' %}active{% endif %}">
-                <span class="nav-icon">&#9889;</span><span class="nav-text">Live Optimizer</span>
-            </a>
-            <a href="/spot" class="nav-item {% if active == 'spot' %}active{% endif %}">
-                <span class="nav-icon">&#128161;</span><span class="nav-text">Spot Manager</span>
-            </a>
-            <a href="/binpack" class="nav-item {% if active == 'binpack' %}active{% endif %}">
-                <span class="nav-icon">&#128230;</span><span class="nav-text">Bin Packing</span>
-            </a>
-            <a href="/gpu" class="nav-item {% if active == 'gpu' %}active{% endif %}">
-                <span class="nav-icon">&#127918;</span><span class="nav-text">GPU Optimizer</span>
-            </a>
-        </div>
-
-        <div class="nav-divider"></div>
-
-        <div class="nav-section">
-            <div class="nav-label">Intelligence</div>
-            <a href="/security" class="nav-item {% if active == 'security' %}active{% endif %}">
-                <span class="nav-icon">&#128737;</span><span class="nav-text">Security Scanner</span>
-            </a>
-            <a href="/predict" class="nav-item {% if active == 'predict' %}active{% endif %}">
-                <span class="nav-icon">&#128302;</span><span class="nav-text">AI Predictions</span>
-            </a>
-        </div>
-    </div>
-
-    <div class="sidebar-footer">
+    <div class="aws-topbar-right">
+        <span class="region">ap-south-1</span>
         {% if user %}
-        <div class="user-avatar">{{ user.email[0]|upper }}</div>
-        <div class="user-info-box">
-            <div class="user-email">{{ user.email }}</div>
-            <a href="/auth/logout" class="user-logout">Sign out</a>
-        </div>
-        {% else %}
-        <div class="user-avatar">?</div>
+        <span class="user-btn">{{ user.email }}</span>
+        <a href="/auth/logout" class="signout">Sign out</a>
         {% endif %}
     </div>
 </div>
 
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-search">
+        <input type="text" id="navSearch" placeholder="Search features..." oninput="filterNav(this.value)">
+    </div>
+
+    <div class="nav-group">
+        <div class="nav-group-title">Monitor</div>
+        <a href="/" class="nav-item {% if active == 'dashboard' %}active{% endif %}" data-search="dashboard pods health monitor">
+            <span class="nav-icon">&#128202;</span>Dashboard
+        </a>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-group">
+        <div class="nav-group-title">Cost Management</div>
+        <a href="/cost" class="nav-item {% if active == 'cost' %}active{% endif %}" data-search="cost optimizer savings analysis">
+            <span class="nav-icon">&#128176;</span>Cost Optimizer
+        </a>
+        <a href="/costs" class="nav-item {% if active == 'costs' %}active{% endif %}" data-search="cost visibility namespace deployment pod breakdown">
+            <span class="nav-icon">&#128200;</span>Cost Visibility
+        </a>
+        <a href="/nodes" class="nav-item {% if active == 'nodes' %}active{% endif %}" data-search="node optimizer instance replace cheaper">
+            <span class="nav-icon">&#128421;</span>Node Optimizer
+        </a>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-group">
+        <div class="nav-group-title">Optimization</div>
+        <a href="/optimizer" class="nav-item {% if active == 'optimizer' %}active{% endif %}" data-search="live optimizer autoscale rightsize continuous">
+            <span class="nav-icon">&#9889;</span>Live Optimizer
+        </a>
+        <a href="/spot" class="nav-item {% if active == 'spot' %}active{% endif %}" data-search="spot instance manager savings interruption">
+            <span class="nav-icon">&#128161;</span>Spot Manager
+        </a>
+        <a href="/binpack" class="nav-item {% if active == 'binpack' %}active{% endif %}" data-search="bin packing efficiency defragmentation">
+            <span class="nav-icon">&#128230;</span>Bin Packing
+        </a>
+        <a href="/gpu" class="nav-item {% if active == 'gpu' %}active{% endif %}" data-search="gpu optimizer tracking rightsize">
+            <span class="nav-icon">&#127918;</span>GPU Optimizer
+        </a>
+    </div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-group">
+        <div class="nav-group-title">Intelligence</div>
+        <a href="/security" class="nav-item {% if active == 'security' %}active{% endif %}" data-search="security scanner compliance rbac vulnerability">
+            <span class="nav-icon">&#128737;</span>Security Scanner
+        </a>
+        <a href="/predict" class="nav-item {% if active == 'predict' %}active{% endif %}" data-search="ai predictions forecast anomaly capacity">
+            <span class="nav-icon">&#128302;</span>AI Predictions
+        </a>
+    </div>
+</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
 <script>
-function togglePin() {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.classList.toggle('pinned');
-    localStorage.setItem('sidebarPinned', sidebar.classList.contains('pinned'));
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
 }
-// Restore pin state
-if (localStorage.getItem('sidebarPinned') === 'true') {
-    document.getElementById('sidebar').classList.add('pinned');
+
+function filterNav(query) {
+    query = query.toLowerCase();
+    document.querySelectorAll('.nav-item').forEach(item => {
+        const search = (item.getAttribute('data-search') || '') + ' ' + item.textContent.toLowerCase();
+        item.style.display = search.includes(query) ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-group-title').forEach(title => {
+        const group = title.parentElement;
+        const visibleItems = group.querySelectorAll('.nav-item:not([style*="display: none"])');
+        title.style.display = visibleItems.length > 0 || !query ? '' : 'none';
+    });
 }
+
+// Close on nav click
+document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => document.getElementById('sidebar').classList.remove('open'));
+});
 </script>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bin Packing - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #ed64a6; }
+        .nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #ed64a6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .btn { background: #ed64a6; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px; }
+        .btn:hover { background: #d53f8c; }
+        .btn.loading { background: #a0aec0; cursor: wait; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .num { font-size: 28px; font-weight: bold; }
+        .stat .lbl { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin: 12px 0; }
+        .card h3 { color: #ed64a6; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 8px 12px; text-align: left; color: #a0aec0; font-size: 11px; text-transform: uppercase; background: #2d3748; }
+        td { padding: 8px 12px; border-bottom: 1px solid #2d374830; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .b-optimal { background: #22543d; color: #48bb78; }
+        .b-moderate { background: #744210; color: #ecc94b; }
+        .b-under { background: #742a2a; color: #fc8181; }
+        .score-bar { height: 8px; border-radius: 4px; background: #2d3748; }
+        .score-fill { height: 100%; border-radius: 4px; }
+        .move { background: #0f1419; border: 1px solid #2d3748; border-radius: 6px; padding: 10px; margin: 5px 0; font-size: 12px; display: flex; justify-content: space-between; }
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set active = 'binpack' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="btn" id="btn" onclick="run()">Analyze Bin Packing</button>
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat"><div class="num" id="eff" style="color:#ed64a6;">0</div><div class="lbl">Avg Efficiency Score</div></div>
+                <div class="stat"><div class="num" id="waste_cpu" style="color:#fc8181;">0m</div><div class="lbl">Wasted CPU</div></div>
+                <div class="stat"><div class="num" id="waste_mem" style="color:#ecc94b;">0Mi</div><div class="lbl">Wasted Memory</div></div>
+                <div class="stat"><div class="num" id="reclaimable" style="color:#48bb78;">0</div><div class="lbl">Nodes Reclaimable</div></div>
+            </div>
+            <div class="card"><h3>Node Efficiency Scores</h3><table><thead><tr><th>Node</th><th>Score</th><th>CPU</th><th>Memory</th><th>Pods</th><th>Fragmentation</th><th>Status</th><th>Efficiency</th></tr></thead><tbody id="scoresBody"></tbody></table></div>
+            <div class="card"><h3>Defragmentation Plan</h3><div id="defragPlan" style="margin-bottom:10px;"></div><div id="moves"></div></div>
+            <div class="card"><h3>Priority Analysis</h3><div id="priority"></div></div>
+        </div>
+    </div>
+    <script>
+    async function run() {
+        const btn = document.getElementById('btn'); btn.textContent = 'Analyzing...'; btn.classList.add('loading');
+        try {
+            const r = await fetch('/api/binpack', {method:'POST'}); const d = await r.json();
+            if (!d.success) { alert(d.message); btn.textContent='Analyze Bin Packing'; btn.classList.remove('loading'); return; }
+            const s = d.summary;
+            document.getElementById('eff').textContent = s.avg_efficiency;
+            document.getElementById('waste_cpu').textContent = s.total_wasted_cpu_m + 'm';
+            document.getElementById('waste_mem').textContent = s.total_wasted_mem_mi + 'Mi';
+            document.getElementById('reclaimable').textContent = s.nodes_reclaimable;
+            let html = '';
+            d.node_scores.forEach(n => {
+                const cls = n.status === 'optimal' ? 'b-optimal' : n.status === 'moderate' ? 'b-moderate' : 'b-under';
+                const color = n.efficiency_score > 60 ? '#48bb78' : n.efficiency_score > 30 ? '#ecc94b' : '#fc8181';
+                html += `<tr><td style="font-size:12px;">${n.node}</td><td style="font-weight:700;color:${color};">${n.efficiency_score}</td><td>${n.cpu_util}</td><td>${n.mem_util}</td><td>${n.pod_density}</td><td>${n.fragmentation}</td><td><span class="badge ${cls}">${n.status}</span></td><td><div class="score-bar" style="width:100px;"><div class="score-fill" style="width:${n.efficiency_score}%;background:${color};"></div></div></td></tr>`;
+            });
+            document.getElementById('scoresBody').innerHTML = html;
+            document.getElementById('defragPlan').innerHTML = `<div style="font-size:14px;font-weight:600;color:#ed64a6;">${d.defragmentation.plan}</div><div style="font-size:12px;color:#a0aec0;margin-top:5px;">${d.defragmentation.total_moves} pod moves needed</div>`;
+            let movesHtml = '';
+            (d.defragmentation.moves || []).forEach(m => {
+                movesHtml += `<div class="move"><span>${m.pod}</span><span style="color:#fc8181;">${m.from_node}</span><span>&rarr;</span><span style="color:#48bb78;">${m.to_node}</span><span>${m.cpu} / ${m.memory}</span></div>`;
+            });
+            document.getElementById('moves').innerHTML = movesHtml || '<div style="color:#48bb78;padding:10px;">No moves needed</div>';
+            const p = d.priority_analysis;
+            document.getElementById('priority').innerHTML = `<div style="font-size:13px;"><strong>Critical Pods:</strong> ${p.critical_pod_count} | <strong>Non-Critical:</strong> ${p.non_critical_pod_count} | <strong>Nodes with Headroom:</strong> ${p.headroom_nodes}</div><div style="margin-top:8px;color:#a0aec0;font-size:13px;">${p.recommendation}</div>`;
+            document.getElementById('results').style.display = 'block';
+            btn.textContent = 'Refresh'; btn.classList.remove('loading');
+        } catch(e) { alert(e.message); btn.textContent='Analyze Bin Packing'; btn.classList.remove('loading'); }
+    }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

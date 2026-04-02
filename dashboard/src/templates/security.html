@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Scanner - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #fc8181; }
+        .nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #fc8181; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .btn { background: #fc8181; color: #1a2332; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px; }
+        .btn:hover { background: #feb2b2; }
+        .btn.loading { background: #a0aec0; cursor: wait; }
+        .score-box { text-align: center; padding: 30px; margin: 15px 0; border-radius: 12px; }
+        .score-box .score { font-size: 64px; font-weight: bold; }
+        .score-box .label { font-size: 16px; margin-top: 5px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .num { font-size: 28px; font-weight: bold; }
+        .stat .lbl { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .tabs { display: flex; gap: 5px; margin: 15px 0; }
+        .tab { padding: 8px 16px; background: #1a2332; border: 1px solid #2d3748; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; color: #a0aec0; }
+        .tab.active { background: #2d3748; color: #fc8181; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .card h3 { color: #fc8181; padding: 15px 20px; margin: 0; font-size: 15px; border-bottom: 1px solid #2d3748; }
+        .issue { background: #0f1419; border-left: 3px solid; padding: 12px 15px; margin: 6px 10px; border-radius: 0 6px 6px 0; font-size: 13px; }
+        .issue.critical { border-color: #fc8181; }
+        .issue.warning { border-color: #ecc94b; }
+        .issue .type { font-weight: 600; }
+        .issue .pod { color: #63b3ed; font-size: 12px; }
+        .issue .detail { color: #a0aec0; font-size: 12px; margin-top: 4px; }
+        .issue .fix { color: #48bb78; font-size: 12px; margin-top: 4px; }
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set active = 'security' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="btn" id="btn" onclick="scan()">Run Security Scan</button>
+        <div id="results" style="display:none;">
+            <div class="score-box" id="scoreBox"><div class="score" id="score">0</div><div class="label" id="scoreLabel">Security Score</div></div>
+            <div class="stats">
+                <div class="stat"><div class="num" id="totalIssues" style="color:#fc8181;">0</div><div class="lbl">Total Issues</div></div>
+                <div class="stat"><div class="num" id="critCount" style="color:#fc8181;">0</div><div class="lbl">Critical</div></div>
+                <div class="stat"><div class="num" id="warnCount" style="color:#ecc94b;">0</div><div class="lbl">Warning</div></div>
+                <div class="stat"><div class="num" id="secretCount" style="color:#9f7aea;">0</div><div class="lbl">Exposed Secrets</div></div>
+            </div>
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('misconfig')">Misconfigurations</div>
+                <div class="tab" onclick="showTab('rbac')">RBAC Audit</div>
+                <div class="tab" onclick="showTab('netpol')">Network Policies</div>
+                <div class="tab" onclick="showTab('secrets')">Secret Exposure</div>
+                <div class="tab" onclick="showTab('vulns')">Vulnerabilities</div>
+            </div>
+            <div id="misconfig" class="tab-content active"><div class="card"><h3>Misconfigurations</h3><div id="misconfigDiv"></div></div></div>
+            <div id="rbac" class="tab-content"><div class="card"><h3>RBAC Audit</h3><div id="rbacDiv"></div></div></div>
+            <div id="netpol" class="tab-content"><div class="card"><h3>Network Policies</h3><div id="netpolDiv"></div></div></div>
+            <div id="secrets" class="tab-content"><div class="card"><h3>Secret Exposure</h3><div id="secretsDiv"></div></div></div>
+            <div id="vulns" class="tab-content"><div class="card"><h3>Image Vulnerabilities</h3><div id="vulnsDiv"></div></div></div>
+        </div>
+    </div>
+    <script>
+    function showTab(id) {
+        document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        event.target.classList.add('active');
+    }
+    function issueHtml(items, emptyMsg) {
+        if (!items || items.length === 0) return `<div style="padding:20px;text-align:center;color:#48bb78;">${emptyMsg}</div>`;
+        return items.map(i => `<div class="issue ${i.severity||'warning'}"><div class="type">[${(i.severity||'').toUpperCase()}] ${i.type||''}</div><div class="pod">${i.pod||i.binding||i.role||i.namespace||''} ${i.container?'/ '+i.container:''}</div><div class="detail">${i.detail||i.description||''}</div>${i.fix?'<div class="fix">Fix: '+i.fix+'</div>':''}</div>`).join('');
+    }
+    async function scan() {
+        const btn = document.getElementById('btn'); btn.textContent='Scanning...'; btn.classList.add('loading');
+        try {
+            const r = await fetch('/api/security-scan',{method:'POST'}); const d = await r.json();
+            if (!d.success) { alert(d.message); btn.textContent='Run Security Scan'; btn.classList.remove('loading'); return; }
+            const s = d.security_score;
+            const color = s >= 80 ? '#48bb78' : s >= 50 ? '#ecc94b' : '#fc8181';
+            const bg = s >= 80 ? '#22543d' : s >= 50 ? '#744210' : '#742a2a';
+            document.getElementById('scoreBox').style.background = `linear-gradient(135deg, ${bg}, #1a2332)`;
+            document.getElementById('scoreBox').style.border = `1px solid ${color}`;
+            document.getElementById('score').textContent = s;
+            document.getElementById('score').style.color = color;
+            document.getElementById('scoreLabel').textContent = s >= 80 ? 'Good' : s >= 50 ? 'Needs Improvement' : 'Critical';
+            document.getElementById('scoreLabel').style.color = color;
+            document.getElementById('totalIssues').textContent = d.total_issues;
+            document.getElementById('critCount').textContent = d.critical_count;
+            document.getElementById('warnCount').textContent = d.warning_count;
+            document.getElementById('secretCount').textContent = d.secret_exposure.total_exposures;
+            document.getElementById('misconfigDiv').innerHTML = issueHtml(d.misconfigurations.issues, 'No misconfigurations found!');
+            document.getElementById('rbacDiv').innerHTML = issueHtml(d.rbac_audit.issues, 'RBAC configuration is secure!');
+            let netHtml = '';
+            if (d.network_policies.unprotected.length > 0) {
+                netHtml = d.network_policies.unprotected.map(n => `<div class="issue warning"><div class="type">[WARNING] No NetworkPolicy</div><div class="pod">${n.namespace}</div><div class="detail">${n.detail}</div><div class="fix">Fix: ${n.fix}</div></div>`).join('');
+            } else { netHtml = '<div style="padding:20px;text-align:center;color:#48bb78;">All namespaces have NetworkPolicies!</div>'; }
+            document.getElementById('netpolDiv').innerHTML = netHtml;
+            document.getElementById('secretsDiv').innerHTML = issueHtml(d.secret_exposure.exposures, 'No exposed secrets found!');
+            document.getElementById('vulnsDiv').innerHTML = issueHtml(d.vulnerabilities.vulnerabilities, 'No vulnerabilities detected!');
+            document.getElementById('results').style.display = 'block';
+            btn.textContent='Rescan'; btn.classList.remove('loading');
+        } catch(e) { alert(e.message); btn.textContent='Run Security Scan'; btn.classList.remove('loading'); }
+    }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

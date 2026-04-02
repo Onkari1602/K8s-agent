@@ -1,0 +1,15 @@
+apiVersion: v2
+name: k8s-healing-agent
+description: AI-powered Kubernetes self-healing agent with cost optimization, security scanning, and prediction engine
+type: application
+version: 1.0.0
+appVersion: "3.0"
+keywords:
+  - kubernetes
+  - self-healing
+  - cost-optimization
+  - security
+  - ai
+  - bedrock
+maintainers:
+  - name: ACC DevOps

@@ -1,0 +1,13 @@
+# Copy this to terraform.tfvars and fill in your values
+
+aws_region         = "ap-south-1"
+cluster_name       = "atlas-api-manager-eks-cluster"
+vpc_id             = "vpc-0dbd2234104be2f55"
+private_subnet_ids = ["subnet-06169ad1683f1db83", "subnet-01c3552cc8c37f906"]
+eks_cluster_sg_id  = "sg-051e8d21b78f078e2"
+namespace          = "atlas-dev"
+dashboard_domain   = "healing.agentichumans.in"
+route53_zone_id    = "Z070547113CE6D9QHQBNF"
+nlb_dns            = "atlas-apimanager-nginx-nlb-5001975bfe061c65.elb.ap-south-1.amazonaws.com"
+cognito_enabled    = true
+bedrock_model_id   = "anthropic.claude-3-haiku-20240307-v1:0"

@@ -1,0 +1,46 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-south-1
+    CLUSTER_NAME: atlas-api-manager-eks-cluster
+    NAMESPACE: atlas-dev
+    AGENT_REPO: k8s-healing-agent
+    DASHBOARD_REPO: k8s-healing-dashboard
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to ECR...
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - ECR_URI=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+      - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_URI}
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:-latest}
+      - echo "Building tag ${IMAGE_TAG}"
+
+  build:
+    commands:
+      - echo Building Agent image...
+      - docker build -t ${ECR_URI}/${AGENT_REPO}:${IMAGE_TAG} -t ${ECR_URI}/${AGENT_REPO}:latest .
+      - echo Building Dashboard image...
+      - cd ../k8s-healing-dashboard || cd dashboard
+      - docker build -t ${ECR_URI}/${DASHBOARD_REPO}:${IMAGE_TAG} -t ${ECR_URI}/${DASHBOARD_REPO}:latest .
+      - cd ..
+
+  post_build:
+    commands:
+      - echo Pushing images...
+      - docker push ${ECR_URI}/${AGENT_REPO}:${IMAGE_TAG}
+      - docker push ${ECR_URI}/${AGENT_REPO}:latest
+      - docker push ${ECR_URI}/${DASHBOARD_REPO}:${IMAGE_TAG}
+      - docker push ${ECR_URI}/${DASHBOARD_REPO}:latest
+      - echo Updating kubeconfig...
+      - aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}
+      - echo Deploying to EKS...
+      - kubectl set image deployment/k8s-healing-agent-depl healing-agent=${ECR_URI}/${AGENT_REPO}:${IMAGE_TAG} -n ${NAMESPACE}
+      - kubectl set image deployment/healing-dashboard-depl dashboard=${ECR_URI}/${DASHBOARD_REPO}:${IMAGE_TAG} -n ${NAMESPACE}
+      - echo Waiting for rollout...
+      - kubectl rollout status deployment/k8s-healing-agent-depl -n ${NAMESPACE} --timeout=120s
+      - kubectl rollout status deployment/healing-dashboard-depl -n ${NAMESPACE} --timeout=120s
+      - echo Deploy complete!

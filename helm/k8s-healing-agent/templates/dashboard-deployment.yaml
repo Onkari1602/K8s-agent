@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: healing-dashboard-svc
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: healing-dashboard
+  type: {{ .Values.dashboard.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.dashboard.service.port }}
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healing-dashboard-depl
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: healing-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: healing-dashboard
+  template:
+    metadata:
+      labels:
+        app: healing-dashboard
+        self-healing: disabled
+    spec:
+      serviceAccountName: healing-dashboard-sa
+      {{- with .Values.dashboard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: dashboard
+          image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: REPORT_NAMESPACE
+              value: {{ .Values.namespace | quote }}
+            - name: EXCLUDE_NAMESPACES
+              value: {{ .Values.config.excludeNamespaces | quote }}
+            - name: BEDROCK_REGION
+              value: {{ .Values.bedrock.region | quote }}
+            - name: BEDROCK_MODEL_ID
+              value: {{ .Values.bedrock.modelId | quote }}
+            - name: BEDROCK_ENDPOINT_URL
+              value: {{ .Values.bedrock.endpointUrl | quote }}
+            - name: CLUSTER_NAME
+              value: {{ .Values.clusterName | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.awsRegion | quote }}
+            - name: CLUSTER_REGIONS
+              value: {{ .Values.awsRegion | quote }}
+            {{- if .Values.cognito.enabled }}
+            - name: AUTH_ENABLED
+              value: "true"
+            - name: COGNITO_REGION
+              value: {{ .Values.cognito.region | quote }}
+            - name: COGNITO_USER_POOL_ID
+              value: {{ .Values.cognito.userPoolId | quote }}
+            - name: COGNITO_CLIENT_ID
+              value: {{ .Values.cognito.clientId | quote }}
+            - name: COGNITO_CLIENT_SECRET
+              value: {{ .Values.cognito.clientSecret | quote }}
+            - name: COGNITO_DOMAIN
+              value: {{ .Values.cognito.domain | quote }}
+            - name: APP_URL
+              value: {{ .Values.cognito.appUrl | quote }}
+            {{- else }}
+            - name: AUTH_ENABLED
+              value: "false"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      restartPolicy: Always

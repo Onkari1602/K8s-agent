@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Optimization - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #48bb78; }
+        .nav { display: flex; gap: 15px; align-items: center; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 5px; }
+        .nav a:hover, .nav a.active { color: #63b3ed; background: #2d3748; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        .run-btn { background: #48bb78; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 20px 0; }
+        .run-btn:hover { background: #38a169; }
+        .run-btn.loading { background: #ecc94b; color: #1a2332; cursor: wait; }
+
+        .result-card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 25px; margin: 15px 0; }
+        .result-card h3 { color: #63b3ed; margin-bottom: 15px; }
+
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; text-align: center; }
+        .stat .number { font-size: 32px; font-weight: bold; }
+        .stat .label { font-size: 13px; color: #a0aec0; margin-top: 5px; }
+        .stat.cost .number { color: #fc8181; }
+        .stat.savings .number { color: #48bb78; }
+        .stat.warning .number { color: #ecc94b; }
+        .stat.info .number { color: #63b3ed; }
+
+        .ai-summary { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 25px; margin: 20px 0; white-space: pre-wrap; line-height: 1.8; font-size: 14px; }
+        .ai-summary h3 { color: #48bb78; margin-bottom: 15px; }
+
+        .report-content { background: #0f1419; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; max-height: 600px; overflow-y: auto; }
+
+        .history { margin-top: 30px; }
+        .history-item { background: #1a2332; border: 1px solid #2d3748; border-radius: 8px; padding: 15px; margin: 10px 0; cursor: pointer; }
+        .history-item:hover { border-color: #63b3ed; }
+        .history-item .meta { font-size: 12px; color: #a0aec0; }
+
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set active = 'cost' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="run-btn" id="analyzeBtn" onclick="runAnalysis()">Run Cost Analysis</button>
+
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat cost"><div class="number" id="monthlyCost">$0</div><div class="label">Estimated Monthly Cost</div></div>
+                <div class="stat savings"><div class="number" id="savings">$0</div><div class="label">Potential Savings</div></div>
+                <div class="stat warning"><div class="number" id="oversized">0</div><div class="label">Oversized Pods</div></div>
+                <div class="stat info"><div class="number" id="idlePods">0</div><div class="label">Idle Pods</div></div>
+            </div>
+
+            <div class="ai-summary">
+                <h3>AI Executive Summary</h3>
+                <div id="aiSummary"></div>
+            </div>
+
+            <div class="result-card">
+                <h3>Full Report</h3>
+                <div class="report-content" id="fullReport"></div>
+            </div>
+        </div>
+
+        <!-- Node Optimization Results -->
+        <div id="nodeResults" style="display:none;">
+            <div class="stats">
+                <div class="stat cost"><div class="number" id="nodeCurrent">$0</div><div class="label">Current Node Cost</div></div>
+                <div class="stat savings"><div class="number" id="nodeSavings">$0</div><div class="label">Potential Savings</div></div>
+                <div class="stat info"><div class="number" id="nodeOptimized">$0</div><div class="label">Optimized Cost</div></div>
+                <div class="stat warning"><div class="number" id="nodeRecs">0</div><div class="label">Replacements Found</div></div>
+            </div>
+
+            <div class="result-card">
+                <h3>Node Group Analysis</h3>
+                <div id="nodeGroups" style="overflow-x:auto;"></div>
+            </div>
+
+            <div class="result-card">
+                <h3>Replacement Recommendations</h3>
+                <div id="replacements"></div>
+            </div>
+
+            <div class="ai-summary">
+                <h3>AI Migration Plan</h3>
+                <div id="migrationPlan" style="white-space:pre-wrap;"></div>
+            </div>
+        </div>
+
+        <div class="history">
+            <h3 style="color:#63b3ed; margin-bottom:15px;">Previous Reports</h3>
+            {% for report in cost_reports %}
+            <div class="history-item" onclick="this.querySelector('.report-content').style.display = this.querySelector('.report-content').style.display === 'none' ? 'block' : 'none'">
+                <div class="meta">{{ report.id }} | {{ report.age }} ago</div>
+                <div class="report-content" style="display:none; margin-top:10px;">{{ report.content }}</div>
+            </div>
+            {% endfor %}
+            {% if not cost_reports %}
+            <div style="color:#a0aec0; padding:20px;">No previous reports. Click "Run Cost Analysis" to generate one.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        async function runAnalysis() {
+            const btn = document.getElementById('analyzeBtn');
+            btn.textContent = 'Analyzing cluster costs...';
+            btn.classList.add('loading');
+
+            try {
+                const resp = await fetch('/api/cost/analyze', { method: 'POST' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    document.getElementById('monthlyCost').textContent = '$' + data.monthly_cost;
+                    document.getElementById('savings').textContent = '$' + data.potential_savings;
+                    document.getElementById('oversized').textContent = data.oversized_pods;
+                    document.getElementById('idlePods').textContent = data.idle_pods;
+                    document.getElementById('aiSummary').textContent = data.ai_summary;
+                    document.getElementById('fullReport').textContent = data.content;
+                    document.getElementById('results').style.display = 'block';
+                    btn.textContent = 'Analysis Complete';
+                    btn.style.background = '#48bb78';
+                } else {
+                    alert('Analysis failed: ' + (data.message || 'Unknown error'));
+                    btn.textContent = 'Run Cost Analysis';
+                    btn.classList.remove('loading');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Run Cost Analysis';
+                btn.classList.remove('loading');
+            }
+        }
+        async function runNodeOptimize() {
+            const btn = document.getElementById('nodeBtn');
+            btn.textContent = 'Analyzing nodes...';
+            btn.classList.add('loading');
+
+            try {
+                const resp = await fetch('/api/node-optimize', { method: 'POST' });
+                const data = await resp.json();
+
+                if (data.success) {
+                    document.getElementById('nodeCurrent').textContent = '$' + data.current_monthly_cost;
+                    document.getElementById('nodeSavings').textContent = '$' + data.potential_savings;
+                    document.getElementById('nodeOptimized').textContent = '$' + data.optimized_monthly_cost;
+                    document.getElementById('nodeRecs').textContent = data.replacements.length;
+
+                    // Node groups table
+                    let ngHtml = '<table style="width:100%; font-size:13px; border-collapse:collapse;">';
+                    ngHtml += '<tr style="border-bottom:1px solid #2d3748;"><th style="padding:8px; text-align:left; color:#a0aec0;">Node Group</th><th>Instance</th><th>Capacity</th><th>Nodes</th><th>Cost</th><th>CPU Util</th><th>Mem Util</th></tr>';
+                    data.node_groups.forEach(g => {
+                        ngHtml += '<tr style="border-bottom:1px solid #2d374830;">';
+                        ngHtml += '<td style="padding:8px; font-weight:600;">' + g.name + '</td>';
+                        ngHtml += '<td style="padding:8px;">' + g.instance_type + '</td>';
+                        ngHtml += '<td style="padding:8px;"><span style="padding:2px 8px; border-radius:10px; font-size:11px; background:' + (g.capacity_type === 'SPOT' ? '#22543d; color:#48bb78' : '#744210; color:#ecc94b') + ';">' + g.capacity_type + '</span></td>';
+                        ngHtml += '<td style="padding:8px;">' + g.nodes + '</td>';
+                        ngHtml += '<td style="padding:8px;">' + g.monthly_cost + '</td>';
+                        ngHtml += '<td style="padding:8px;">' + g.avg_cpu_util + '</td>';
+                        ngHtml += '<td style="padding:8px;">' + g.avg_mem_util + '</td>';
+                        ngHtml += '</tr>';
+                    });
+                    ngHtml += '</table>';
+                    document.getElementById('nodeGroups').innerHTML = ngHtml;
+
+                    // Replacements
+                    let repHtml = '';
+                    data.replacements.forEach(r => {
+                        repHtml += '<div style="background:#0f1419; border:1px solid #2d3748; border-radius:8px; padding:15px; margin:10px 0;">';
+                        repHtml += '<div style="display:flex; justify-content:space-between; align-items:center;">';
+                        repHtml += '<div><strong>' + r.current_group + '</strong><br><span style="color:#fc8181;">' + r.current + '</span> &rarr; <span style="color:#48bb78;">' + r.recommended + '</span></div>';
+                        repHtml += '<div style="text-align:right;"><div style="font-size:20px; font-weight:bold; color:#48bb78;">' + r.savings + '</div>';
+                        repHtml += '<span style="padding:2px 8px; border-radius:10px; font-size:11px; background:' + (r.risk === 'low' ? '#22543d; color:#48bb78' : '#744210; color:#ecc94b') + ';">Risk: ' + r.risk + '</span>';
+                        if (r.auto_executable) {
+                            repHtml += ' <button onclick="executeReplace(\'' + r.current_group + '\', \'' + r.recommended.split(' ')[0] + '\', \'' + (r.recommended.includes('SPOT') ? 'SPOT' : 'ON_DEMAND') + '\')" style="background:#e53e3e; color:white; border:none; padding:4px 12px; border-radius:4px; cursor:pointer; font-size:11px; margin-left:5px;">Apply</button>';
+                        }
+                        repHtml += '</div></div>';
+                        repHtml += '<div style="margin-top:8px; font-size:12px; color:#a0aec0;">' + r.reason + '</div>';
+                        repHtml += '</div>';
+                    });
+                    if (data.replacements.length === 0) repHtml = '<div style="padding:20px; color:#48bb78;">All nodes are optimally configured!</div>';
+                    document.getElementById('replacements').innerHTML = repHtml;
+
+                    document.getElementById('migrationPlan').textContent = data.ai_migration_plan;
+                    document.getElementById('nodeResults').style.display = 'block';
+
+                    btn.textContent = 'Analysis Complete';
+                    btn.style.background = '#48bb78';
+                } else {
+                    alert('Failed: ' + (data.message || 'Unknown error'));
+                    btn.textContent = 'Find Cheaper Nodes';
+                    btn.classList.remove('loading');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Find Cheaper Nodes';
+                btn.classList.remove('loading');
+            }
+        }
+
+        async function executeReplace(nodeGroup, instanceType, capacityType) {
+            if (!confirm('Replace ' + nodeGroup + ' with ' + instanceType + ' (' + capacityType + ')? This will trigger a rolling update.')) return;
+            try {
+                const resp = await fetch('/api/node-replace', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({node_group: nodeGroup, new_instance_type: instanceType, new_capacity_type: capacityType}),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    alert('Success: ' + data.message);
+                } else {
+                    let msg = data.message;
+                    if (data.manual_steps) msg += '\n\nManual steps:\n' + data.manual_steps.join('\n');
+                    alert(msg);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

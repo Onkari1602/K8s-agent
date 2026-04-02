@@ -1,0 +1,106 @@
+# K8s Self-Healing Agent - Helm Values
+# Override these values for your environment
+
+# ============================================
+# Global
+# ============================================
+namespace: atlas-dev
+clusterName: atlas-api-manager-eks-cluster
+awsRegion: ap-south-1
+awsAccountId: "766940073591"
+
+# ============================================
+# Agent
+# ============================================
+agent:
+  image:
+    repository: 766940073591.dkr.ecr.ap-south-1.amazonaws.com/k8s-healing-agent
+    tag: v3
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector:
+    environment: dev
+  tolerations:
+    - key: environment
+      operator: Equal
+      value: dev
+      effect: NoSchedule
+
+# ============================================
+# Dashboard
+# ============================================
+dashboard:
+  image:
+    repository: 766940073591.dkr.ecr.ap-south-1.amazonaws.com/k8s-healing-dashboard
+    tag: v14
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 8080
+  nodeSelector:
+    environment: dev
+  tolerations:
+    - key: environment
+      operator: Equal
+      value: dev
+      effect: NoSchedule
+
+# ============================================
+# Ingress
+# ============================================
+ingress:
+  enabled: true
+  className: nginx
+  host: healing.agentichumans.in
+
+# ============================================
+# Cognito Authentication
+# ============================================
+cognito:
+  enabled: true
+  region: ap-south-1
+  userPoolId: ap-south-1_aMLGSj7n2
+  clientId: 30hr1atanp06tjhk8ra46434nb
+  clientSecret: ""  # Set via --set or secrets
+  domain: k8s-healing-dashboard
+  appUrl: https://healing.agentichumans.in
+
+# ============================================
+# Bedrock AI
+# ============================================
+bedrock:
+  region: ap-south-1
+  modelId: anthropic.claude-3-haiku-20240307-v1:0
+  endpointUrl: "https://bedrock-runtime.ap-south-1.amazonaws.com"
+  maxTokens: "4096"
+
+# ============================================
+# Agent Configuration
+# ============================================
+config:
+  monitorInterval: "30"
+  monitorNamespaces: ""
+  excludeNamespaces: "kube-system,kube-public,kube-node-lease"
+  autoRemediate: "true"
+  dryRun: "true"
+  confidenceThreshold: "0.7"
+  oomMemoryIncreasePercent: "50"
+  oomMemoryMaxMi: "4096"
+  reportStorage: "configmap"
+  reportRetentionDays: "30"
+  logLevel: "INFO"
+  costInterval: "300"
+  spotCheckInterval: "30"

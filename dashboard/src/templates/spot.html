@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spot Manager - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #68d391; }
+        .nav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 13px; padding: 5px 10px; border-radius: 5px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #68d391; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        .run-btn { background: #68d391; color: #1a2332; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px 0; }
+        .run-btn:hover { background: #48bb78; }
+        .run-btn.loading { background: #a0aec0; cursor: wait; }
+
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .number { font-size: 28px; font-weight: bold; }
+        .stat .label { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin: 12px 0; }
+        .card h3 { color: #68d391; margin-bottom: 12px; font-size: 16px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 10px 15px; text-align: left; color: #a0aec0; font-size: 11px; text-transform: uppercase; background: #2d3748; }
+        td { padding: 9px 15px; border-bottom: 1px solid #2d374830; }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .badge-spot { background: #22543d; color: #48bb78; }
+        .badge-ondemand { background: #744210; color: #ecc94b; }
+        .badge-balanced { background: #22543d; color: #48bb78; }
+        .badge-imbalanced { background: #742a2a; color: #fc8181; }
+
+        .az-bar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; margin: 5px 0; }
+        .az-spot { background: #48bb78; }
+        .az-ondemand { background: #ecc94b; }
+
+        .savings-highlight { background: linear-gradient(135deg, #22543d, #1a2332); border: 1px solid #48bb78; border-radius: 12px; padding: 25px; text-align: center; margin: 15px 0; }
+        .savings-highlight .amount { font-size: 42px; font-weight: bold; color: #48bb78; }
+        .savings-highlight .sub { font-size: 14px; color: #a0aec0; margin-top: 5px; }
+
+        .interruption { background: #0f1419; border: 1px solid #742a2a; border-radius: 8px; padding: 12px; margin: 8px 0; font-size: 12px; }
+        .interruption .time { color: #4a5568; }
+
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+        @media (max-width: 768px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    {% set active = 'spot' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="run-btn" id="loadBtn" onclick="loadSpot()">Load Spot Analysis</button>
+
+        <div id="results" style="display:none;">
+            <!-- Savings Highlight -->
+            <div class="savings-highlight">
+                <div class="amount" id="totalSavings">$0</div>
+                <div class="sub">Monthly Savings from Spot Instances</div>
+                <div class="sub" id="savingsPercent" style="color:#68d391;"></div>
+            </div>
+
+            <div class="stats">
+                <div class="stat"><div class="number" id="spotNodes" style="color:#48bb78;">0</div><div class="label">Spot Nodes</div></div>
+                <div class="stat"><div class="number" id="odNodes" style="color:#ecc94b;">0</div><div class="label">On-Demand Nodes</div></div>
+                <div class="stat"><div class="number" id="actualCost" style="color:#fc8181;">$0</div><div class="label">Actual Monthly Cost</div></div>
+                <div class="stat"><div class="number" id="extraSavings" style="color:#63b3ed;">$0</div><div class="label">Additional Savings Possible</div></div>
+            </div>
+
+            <!-- Spot Nodes -->
+            <div class="card">
+                <h3>Spot Nodes — Savings Breakdown</h3>
+                <table><thead><tr><th>Node</th><th>Instance</th><th>Node Group</th><th>Spot Cost</th><th>On-Demand Cost</th><th>Saving</th></tr></thead>
+                <tbody id="spotBody"></tbody></table>
+            </div>
+
+            <!-- On-Demand Nodes (conversion opportunity) -->
+            <div class="card">
+                <h3>On-Demand Nodes — Conversion Opportunity</h3>
+                <table><thead><tr><th>Node</th><th>Instance</th><th>Node Group</th><th>Current Cost</th><th>If Spot</th><th>Potential Saving</th></tr></thead>
+                <tbody id="odBody"></tbody></table>
+            </div>
+
+            <!-- AZ Distribution -->
+            <div class="card">
+                <h3>Multi-AZ Distribution</h3>
+                <div id="azDiv"></div>
+            </div>
+
+            <!-- Interruption History -->
+            <div class="card">
+                <h3>Spot Interruption History</h3>
+                <div id="interruptionsDiv"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadSpot() {
+            const btn = document.getElementById('loadBtn');
+            btn.textContent = 'Analyzing Spot instances...';
+            btn.classList.add('loading');
+
+            try {
+                const resp = await fetch('/api/spot-status');
+                const data = await resp.json();
+                if (!data.success) { alert(data.message); btn.textContent = 'Load Spot Analysis'; btn.classList.remove('loading'); return; }
+
+                const s = data.savings;
+                document.getElementById('totalSavings').textContent = '$' + s.current_spot_savings;
+                document.getElementById('savingsPercent').textContent = s.savings_percent + '% less than On-Demand';
+                document.getElementById('spotNodes').textContent = s.spot_nodes;
+                document.getElementById('odNodes').textContent = s.ondemand_nodes;
+                document.getElementById('actualCost').textContent = '$' + s.actual_monthly_cost;
+                document.getElementById('extraSavings').textContent = '$' + s.potential_extra_savings;
+
+                // Spot nodes table
+                let spotHtml = '';
+                (s.spot_node_details || []).forEach(n => {
+                    spotHtml += `<tr><td style="font-size:12px;">${n.node}</td><td>${n.type}</td><td>${n.group}</td>
+                        <td style="color:#48bb78;">${n.spot_cost}</td><td style="color:#a0aec0;">${n.ondemand_cost}</td>
+                        <td style="color:#48bb78; font-weight:600;">${n.saving}</td></tr>`;
+                });
+                if (!spotHtml) spotHtml = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#a0aec0;">No Spot nodes running</td></tr>';
+                document.getElementById('spotBody').innerHTML = spotHtml;
+
+                // On-demand nodes
+                let odHtml = '';
+                (s.ondemand_node_details || []).forEach(n => {
+                    odHtml += `<tr><td style="font-size:12px;">${n.node}</td><td>${n.type}</td><td>${n.group}</td>
+                        <td style="color:#ecc94b;">${n.cost}</td><td style="color:#48bb78;">${n.if_spot}</td>
+                        <td style="color:#48bb78; font-weight:600;">${n.potential_saving}</td></tr>`;
+                });
+                if (!odHtml) odHtml = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#48bb78;">All nodes are already Spot!</td></tr>';
+                document.getElementById('odBody').innerHTML = odHtml;
+
+                // AZ Distribution
+                const az = data.az_distribution;
+                let azHtml = '';
+                if (az.availability_zones) {
+                    const badge = az.is_balanced ? 'badge-balanced' : 'badge-imbalanced';
+                    azHtml += `<div style="margin-bottom:15px;"><span class="badge ${badge}">${az.recommendation}</span></div>`;
+                    az.availability_zones.forEach(a => {
+                        const spotPct = a.total_nodes > 0 ? (a.spot_nodes / a.total_nodes * 100) : 0;
+                        const odPct = 100 - spotPct;
+                        azHtml += `<div style="margin:10px 0;">
+                            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
+                                <strong>${a.az}</strong>
+                                <span>${a.total_nodes} nodes (${a.spot_nodes} Spot, ${a.ondemand_nodes} On-Demand)</span>
+                            </div>
+                            <div class="az-bar">
+                                <div class="az-spot" style="width:${spotPct}%;" title="Spot: ${a.spot_nodes}"></div>
+                                <div class="az-ondemand" style="width:${odPct}%;" title="On-Demand: ${a.ondemand_nodes}"></div>
+                            </div>
+                            <div style="font-size:11px; color:#a0aec0; display:flex; gap:15px;">
+                                <span style="color:#48bb78;">Spot: ${spotPct.toFixed(0)}%</span>
+                                <span style="color:#ecc94b;">On-Demand: ${odPct.toFixed(0)}%</span>
+                            </div>
+                        </div>`;
+                    });
+                }
+                document.getElementById('azDiv').innerHTML = azHtml || '<div style="color:#a0aec0;">No AZ data available</div>';
+
+                // Interruptions
+                let intHtml = '';
+                (data.interruptions || []).forEach(i => {
+                    intHtml += `<div class="interruption"><span class="time">${i.age} ago</span><pre style="margin-top:5px; white-space:pre-wrap;">${i.content}</pre></div>`;
+                });
+                if (!intHtml) intHtml = '<div style="padding:20px; text-align:center; color:#48bb78;">No Spot interruptions recorded. The agent monitors continuously and will log any interruptions here.</div>';
+                document.getElementById('interruptionsDiv').innerHTML = intHtml;
+
+                document.getElementById('results').style.display = 'block';
+                btn.textContent = 'Refresh';
+                btn.classList.remove('loading');
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Load Spot Analysis';
+                btn.classList.remove('loading');
+            }
+        }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

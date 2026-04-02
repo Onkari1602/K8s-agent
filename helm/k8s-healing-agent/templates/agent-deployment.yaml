@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-healing-agent-depl
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: k8s-healing-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-healing-agent
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: k8s-healing-agent
+        self-healing: disabled
+    spec:
+      serviceAccountName: k8s-healing-agent-sa
+      {{- with .Values.agent.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.agent.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: healing-agent
+          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: healing-agent-config
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; exit(0)"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+      restartPolicy: Always

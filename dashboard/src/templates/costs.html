@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Visibility - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #f6ad55; }
+        .nav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 13px; padding: 5px 10px; border-radius: 5px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #f6ad55; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .number { font-size: 28px; font-weight: bold; }
+        .stat .label { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+
+        .run-btn { background: #f6ad55; color: #1a2332; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px 0; }
+        .run-btn:hover { background: #ed8936; }
+        .run-btn.loading { background: #a0aec0; cursor: wait; }
+
+        .tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab { padding: 8px 18px; background: #1a2332; border: 1px solid #2d3748; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; color: #a0aec0; }
+        .tab.active { background: #2d3748; color: #f6ad55; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .card h3 { color: #f6ad55; padding: 15px 20px; margin: 0; font-size: 15px; border-bottom: 1px solid #2d3748; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 10px 15px; text-align: left; color: #a0aec0; font-size: 11px; text-transform: uppercase; background: #2d3748; }
+        td { padding: 9px 15px; border-bottom: 1px solid #2d374830; }
+        tr:hover { background: #2d374820; }
+
+        .cost-bar { height: 6px; border-radius: 3px; background: #2d3748; position: relative; min-width: 60px; }
+        .cost-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #48bb78, #f6ad55, #fc8181); }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .badge-spot { background: #22543d; color: #48bb78; }
+        .badge-ondemand { background: #744210; color: #ecc94b; }
+
+        .alert { padding: 12px 18px; border-radius: 8px; margin: 8px 0; font-size: 13px; }
+        .alert-critical { background: #742a2a; border: 1px solid #fc8181; color: #fc8181; }
+        .alert-warning { background: #744210; border: 1px solid #ecc94b; color: #ecc94b; }
+        .alert-approaching { background: #2a4365; border: 1px solid #63b3ed; color: #63b3ed; }
+
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+        @media (max-width: 768px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    {% set active = 'costs' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="run-btn" id="loadBtn" onclick="loadCosts()">Load Cost Breakdown</button>
+
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat"><div class="number" id="totalCost" style="color:#fc8181;">$0</div><div class="label">Monthly Cluster Cost</div></div>
+                <div class="stat"><div class="number" id="totalNodes" style="color:#63b3ed;">0</div><div class="label">Nodes</div></div>
+                <div class="stat"><div class="number" id="totalPods" style="color:#48bb78;">0</div><div class="label">Running Pods</div></div>
+                <div class="stat"><div class="number" id="nsCount" style="color:#f6ad55;">0</div><div class="label">Namespaces</div></div>
+                <div class="stat"><div class="number" id="deplCount" style="color:#9f7aea;">0</div><div class="label">Deployments</div></div>
+            </div>
+
+            <!-- Budget Alerts -->
+            <div id="alertsDiv"></div>
+
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('nsTab')">By Namespace</div>
+                <div class="tab" onclick="showTab('deplTab')">By Deployment</div>
+                <div class="tab" onclick="showTab('podTab')">By Pod</div>
+                <div class="tab" onclick="showTab('nodeTab')">By Node</div>
+            </div>
+
+            <!-- Namespace Tab -->
+            <div id="nsTab" class="tab-content active">
+                <div class="card">
+                    <h3>Cost per Namespace</h3>
+                    <table><thead><tr>
+                        <th>Namespace</th><th>Monthly Cost</th><th>% of Total</th><th>Pods</th><th>Deployments</th><th>CPU (m)</th><th>Memory (Mi)</th><th>Share</th>
+                    </tr></thead><tbody id="nsBody"></tbody></table>
+                </div>
+            </div>
+
+            <!-- Deployment Tab -->
+            <div id="deplTab" class="tab-content">
+                <div class="card">
+                    <h3>Cost per Deployment</h3>
+                    <table><thead><tr>
+                        <th>Deployment</th><th>Namespace</th><th>Monthly Cost</th><th>% of Total</th><th>Pods</th><th>CPU (m)</th><th>Memory (Mi)</th><th>Share</th>
+                    </tr></thead><tbody id="deplBody"></tbody></table>
+                </div>
+            </div>
+
+            <!-- Pod Tab -->
+            <div id="podTab" class="tab-content">
+                <div class="card">
+                    <h3>Cost per Pod (Top 50)</h3>
+                    <table><thead><tr>
+                        <th>Pod</th><th>Namespace</th><th>Deployment</th><th>Monthly Cost</th><th>CPU</th><th>Memory</th><th>Node</th>
+                    </tr></thead><tbody id="podBody"></tbody></table>
+                </div>
+            </div>
+
+            <!-- Node Tab -->
+            <div id="nodeTab" class="tab-content">
+                <div class="card">
+                    <h3>Cost per Node</h3>
+                    <table><thead><tr>
+                        <th>Node</th><th>Instance Type</th><th>Capacity</th><th>Monthly Cost</th>
+                    </tr></thead><tbody id="nodeBody"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function loadCosts() {
+            const btn = document.getElementById('loadBtn');
+            btn.textContent = 'Calculating costs...';
+            btn.classList.add('loading');
+
+            try {
+                const resp = await fetch('/api/cost-breakdown');
+                const data = await resp.json();
+                if (!data.success) { alert('Failed: ' + data.message); btn.textContent = 'Load Cost Breakdown'; btn.classList.remove('loading'); return; }
+
+                // Stats
+                document.getElementById('totalCost').textContent = '$' + data.cluster.total_monthly_cost;
+                document.getElementById('totalNodes').textContent = data.cluster.total_nodes;
+                document.getElementById('totalPods').textContent = data.cluster.total_pods;
+                document.getElementById('nsCount').textContent = data.by_namespace.length;
+                document.getElementById('deplCount').textContent = data.by_deployment.length;
+
+                // Namespace table
+                let nsHtml = '';
+                data.by_namespace.forEach(ns => {
+                    nsHtml += `<tr>
+                        <td style="font-weight:600;">${ns.namespace}</td>
+                        <td style="font-weight:600; color:#f6ad55;">$${ns.monthly_cost}</td>
+                        <td>${ns.cost_percent}%</td>
+                        <td>${ns.pod_count}</td>
+                        <td>${ns.deployment_count}</td>
+                        <td>${ns.cpu_total_m}</td>
+                        <td>${ns.memory_total_mi}</td>
+                        <td><div class="cost-bar"><div class="cost-bar-fill" style="width:${Math.min(ns.cost_percent, 100)}%;"></div></div></td>
+                    </tr>`;
+                });
+                document.getElementById('nsBody').innerHTML = nsHtml;
+
+                // Deployment table
+                let deplHtml = '';
+                data.by_deployment.forEach(d => {
+                    deplHtml += `<tr>
+                        <td style="font-weight:600;">${d.deployment.split('/')[1] || d.deployment}</td>
+                        <td>${d.namespace}</td>
+                        <td style="font-weight:600; color:#f6ad55;">$${d.monthly_cost}</td>
+                        <td>${d.cost_percent}%</td>
+                        <td>${d.pod_count}</td>
+                        <td>${d.cpu_total_m}</td>
+                        <td>${d.memory_total_mi}</td>
+                        <td><div class="cost-bar"><div class="cost-bar-fill" style="width:${Math.min(d.cost_percent * 2, 100)}%;"></div></div></td>
+                    </tr>`;
+                });
+                document.getElementById('deplBody').innerHTML = deplHtml;
+
+                // Pod table
+                let podHtml = '';
+                data.by_pod.forEach(p => {
+                    podHtml += `<tr>
+                        <td style="font-size:12px;">${p.name}</td>
+                        <td>${p.namespace}</td>
+                        <td>${p.deployment || '-'}</td>
+                        <td style="font-weight:600; color:#f6ad55;">$${p.monthly_cost}</td>
+                        <td>${p.cpu_request}</td>
+                        <td>${p.memory_request}</td>
+                        <td style="font-size:11px;">${p.node}</td>
+                    </tr>`;
+                });
+                document.getElementById('podBody').innerHTML = podHtml;
+
+                // Node table
+                let nodeHtml = '';
+                data.nodes.forEach(n => {
+                    const badge = n.capacity_type === 'SPOT' ? 'badge-spot' : 'badge-ondemand';
+                    nodeHtml += `<tr>
+                        <td style="font-size:12px;">${n.name}</td>
+                        <td>${n.instance_type}</td>
+                        <td><span class="badge ${badge}">${n.capacity_type}</span></td>
+                        <td style="font-weight:600; color:#f6ad55;">$${n.monthly_cost}</td>
+                    </tr>`;
+                });
+                document.getElementById('nodeBody').innerHTML = nodeHtml;
+
+                // Save snapshot
+                fetch('/api/cost-snapshot', { method: 'POST' });
+
+                document.getElementById('results').style.display = 'block';
+                btn.textContent = 'Refresh';
+                btn.classList.remove('loading');
+
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Load Cost Breakdown';
+                btn.classList.remove('loading');
+            }
+        }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

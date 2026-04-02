@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Optimizer - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #9f7aea; }
+        .nav { display: flex; gap: 10px; align-items: center; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 13px; padding: 5px 10px; border-radius: 5px; }
+        .nav a:hover, .nav a.active { background: #2d3748; }
+        .nav a.active { color: #9f7aea; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .subtitle { color: #a0aec0; font-size: 14px; margin-bottom: 20px; }
+
+        .status-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
+        .status-card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .status-card .icon { font-size: 28px; margin-bottom: 5px; }
+        .status-card .value { font-size: 24px; font-weight: bold; color: #9f7aea; }
+        .status-card .label { font-size: 12px; color: #a0aec0; margin-top: 4px; }
+
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin: 15px 0; }
+        .card h3 { color: #9f7aea; margin-bottom: 12px; font-size: 16px; }
+
+        .live-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #48bb78; }
+        .live-dot { width: 8px; height: 8px; background: #48bb78; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .log-viewer { background: #0a0e14; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; }
+        .log-line { padding: 2px 0; border-bottom: 1px solid #1a232210; }
+        .log-line .time { color: #4a5568; }
+        .log-line .level-info { color: #63b3ed; }
+        .log-line .level-warn { color: #ecc94b; }
+        .log-line .level-error { color: #fc8181; }
+        .log-line .action { color: #48bb78; font-weight: 600; }
+
+        .action-item { background: #0f1419; border: 1px solid #2d3748; border-radius: 8px; padding: 15px; margin: 8px 0; }
+        .action-header { display: flex; justify-content: space-between; align-items: center; }
+        .action-type { font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
+        .type-autoscale_up { background: #2a4365; color: #63b3ed; }
+        .type-autoscale_down { background: #22543d; color: #48bb78; }
+        .type-rightsize { background: #553c9a; color: #b794f4; }
+        .type-node_consolidation { background: #744210; color: #ecc94b; }
+        .action-target { font-weight: 600; font-size: 14px; }
+        .action-detail { font-size: 12px; color: #a0aec0; margin-top: 6px; }
+        .action-age { font-size: 11px; color: #4a5568; }
+
+        .empty { text-align: center; padding: 30px; color: #4a5568; }
+
+        .tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab { padding: 8px 18px; background: #1a2332; border: 1px solid #2d3748; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; color: #a0aec0; }
+        .tab.active { background: #2d3748; color: #9f7aea; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+
+        @media (max-width: 768px) { .status-bar { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    {% set active = 'optimizer' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <div class="subtitle">Real-time view of the agent's continuous optimization — autoscaling, right-sizing, and node consolidation happening automatically in the background.</div>
+
+        <!-- Status Cards -->
+        <div class="status-bar">
+            <div class="status-card">
+                <div class="icon">&#x1F504;</div>
+                <div class="value">{{ opt_reports|length }}</div>
+                <div class="label">Optimization Cycles</div>
+            </div>
+            <div class="status-card">
+                <div class="icon">&#x26A1;</div>
+                <div class="value" id="totalActions">0</div>
+                <div class="label">Actions Taken</div>
+            </div>
+            <div class="status-card">
+                <div class="icon">&#x1F4CA;</div>
+                <div class="value">{{ agent_logs|length }}</div>
+                <div class="label">Optimizer Log Entries</div>
+            </div>
+            <div class="status-card">
+                <div class="icon">&#x2705;</div>
+                <div class="value">5 min</div>
+                <div class="label">Optimization Interval</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('actions')">Actions & Reports</div>
+            <div class="tab" onclick="showTab('logs')">Agent Logs</div>
+            <div class="tab" onclick="showTab('how')">How It Works</div>
+        </div>
+
+        <!-- Actions Tab -->
+        <div id="actions" class="tab-content active">
+            {% for report in opt_reports %}
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0;">{{ report.id }}</h3>
+                    <span style="font-size:12px; color:#4a5568;">{{ report.age }} ago</span>
+                </div>
+                {% set lines = report.content.split('\n') %}
+                {% for line in lines %}
+                    {% if '**[' in line %}
+                        {% set type_match = line.split('**[')[1].split(']**')[0] if '**[' in line else '' %}
+                        <div class="action-item">
+                            <div class="action-header">
+                                <span class="action-type type-{{ type_match }}">{{ type_match }}</span>
+                            </div>
+                            <div style="margin-top:5px; font-size:13px;">{{ line | replace('**', '') }}</div>
+                        </div>
+                    {% elif 'Action:' in line %}
+                        <div class="action-detail" style="margin-left:15px;">{{ line | replace('- ', '') }}</div>
+                    {% elif 'Details:' in line %}
+                        <div class="action-detail" style="margin-left:15px;">{{ line | replace('- ', '') }}</div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+            {% if not opt_reports %}
+            <div class="empty">No optimization actions yet. The agent runs every 5 minutes — actions will appear here when optimizations are detected.</div>
+            {% endif %}
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs" class="tab-content">
+            <div class="card">
+                <h3>Live Optimizer Logs</h3>
+                <div class="log-viewer">
+                    {% for line in agent_logs %}
+                    <div class="log-line">
+                        {% if '[INFO]' in line %}
+                            {% set parts = line.split(' ', 3) %}
+                            <span class="time">{{ parts[0] }} {{ parts[1] }}</span>
+                            <span class="level-info">[INFO]</span>
+                            {% if 'actions' in line or 'Scaled' in line or 'remove' in line %}
+                                <span class="action">{{ parts[3] if parts|length > 3 else '' }}</span>
+                            {% else %}
+                                <span>{{ parts[3] if parts|length > 3 else '' }}</span>
+                            {% endif %}
+                        {% elif '[ERROR]' in line %}
+                            <span class="level-error">{{ line }}</span>
+                        {% elif '[WARNING]' in line %}
+                            <span class="level-warn">{{ line }}</span>
+                        {% else %}
+                            <span>{{ line }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% if not agent_logs %}
+                    <div class="empty">No optimizer logs yet. Logs appear after the first optimization cycle (60s after agent start).</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- How It Works Tab -->
+        <div id="how" class="tab-content">
+            <div class="card">
+                <h3>Intelligent Autoscaling</h3>
+                <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#63b3ed;">Scale UP</td>
+                        <td style="padding:10px;">When CPU utilization &gt; 85% AND trend is increasing for 15+ minutes. Adds 1 replica (max 5).</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#48bb78;">Scale DOWN</td>
+                        <td style="padding:10px;">When CPU &amp; Memory &lt; 20% for 3 consecutive cycles (15 min). Removes 1 replica (min 1).</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#9f7aea;">Trend Detection</td>
+                        <td style="padding:10px;">Compares last 15 min vs previous 15 min. Detects increasing, decreasing, or stable patterns.</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:10px; font-weight:600; color:#ecc94b;">Predictive</td>
+                        <td style="padding:10px;">Scales BEFORE hitting limits by detecting usage acceleration trends.</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>Auto Right-Sizing</h3>
+                <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#9f7aea;">Detection</td>
+                        <td style="padding:10px;">Tracks P95 CPU/Memory usage per deployment over 30 min window.</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#48bb78;">Trigger</td>
+                        <td style="padding:10px;">If P95 usage &lt; 20% of requests for 3 consecutive cycles (15 min).</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:10px; font-weight:600; color:#63b3ed;">Action</td>
+                        <td style="padding:10px;">Sets new requests to P95 x 2.5 (CPU) and P95 x 1.5 (Memory). Min: 10m CPU, 64Mi Memory.</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>Node Consolidation</h3>
+                <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#ecc94b;">Detection</td>
+                        <td style="padding:10px;">Calculates free CPU/Memory across all nodes in each node group.</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #2d3748;">
+                        <td style="padding:10px; font-weight:600; color:#48bb78;">Trigger</td>
+                        <td style="padding:10px;">If total free capacity &gt; 1 full node's capacity.</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:10px; font-weight:600; color:#fc8181;">Action</td>
+                        <td style="padding:10px;">Scales down node group by removing the extra node(s). Kubernetes drains pods automatically.</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>Safety Guards</h3>
+                <table style="width:100%; font-size:13px; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #2d3748;"><td style="padding:8px;">3-cycle delay</td><td style="padding:8px;">Waits 15 min before scaling down or right-sizing</td></tr>
+                    <tr style="border-bottom:1px solid #2d3748;"><td style="padding:8px;">Min 1 replica</td><td style="padding:8px;">Never scales below 1 pod</td></tr>
+                    <tr style="border-bottom:1px solid #2d3748;"><td style="padding:8px;">Max 5 replicas</td><td style="padding:8px;">Never scales above 5 pods</td></tr>
+                    <tr style="border-bottom:1px solid #2d3748;"><td style="padding:8px;">P95-based</td><td style="padding:8px;">Right-sizes based on 95th percentile, not average</td></tr>
+                    <tr style="border-bottom:1px solid #2d3748;"><td style="padding:8px;">self-healing=disabled</td><td style="padding:8px;">Skips agent pods and any labeled pods</td></tr>
+                    <tr><td style="padding:8px;">DRY_RUN</td><td style="padding:8px;">Logs actions without executing when enabled</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Count total actions from reports
+        let totalActions = 0;
+        document.querySelectorAll('.action-item').forEach(() => totalActions++);
+        document.getElementById('totalActions').textContent = totalActions;
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Auto-refresh every 30s
+        setTimeout(() => location.reload(), 30000);
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

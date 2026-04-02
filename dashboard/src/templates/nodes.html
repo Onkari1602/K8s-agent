@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Optimizer - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #ecc94b; }
+        .nav { display: flex; gap: 15px; align-items: center; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 5px; }
+        .nav a:hover, .nav a.active { color: #ecc94b; background: #2d3748; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .subtitle { color: #a0aec0; font-size: 14px; margin-bottom: 20px; }
+
+        .run-btn { background: #ecc94b; color: #1a2332; border: none; padding: 14px 35px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin: 10px 0 20px 0; }
+        .run-btn:hover { background: #d69e2e; }
+        .run-btn.loading { background: #a0aec0; cursor: wait; }
+        .run-btn.done { background: #48bb78; color: white; }
+
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; text-align: center; }
+        .stat .number { font-size: 32px; font-weight: bold; }
+        .stat .label { font-size: 13px; color: #a0aec0; margin-top: 5px; }
+        .stat.cost .number { color: #fc8181; }
+        .stat.savings .number { color: #48bb78; }
+        .stat.optimized .number { color: #63b3ed; }
+        .stat.recs .number { color: #ecc94b; }
+
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 25px; margin: 15px 0; }
+        .card h3 { color: #ecc94b; margin-bottom: 15px; font-size: 16px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 10px; text-align: left; color: #a0aec0; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #2d3748; }
+        td { padding: 10px; border-bottom: 1px solid #2d374830; }
+
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .badge-spot { background: #22543d; color: #48bb78; }
+        .badge-ondemand { background: #744210; color: #ecc94b; }
+        .badge-low { background: #22543d; color: #48bb78; }
+        .badge-medium { background: #744210; color: #ecc94b; }
+        .badge-high { background: #742a2a; color: #fc8181; }
+
+        .replacement { background: #0f1419; border: 1px solid #2d3748; border-radius: 8px; padding: 18px; margin: 12px 0; }
+        .replacement-header { display: flex; justify-content: space-between; align-items: center; }
+        .replacement-flow { display: flex; align-items: center; gap: 15px; }
+        .replacement-from { color: #fc8181; font-weight: 600; }
+        .replacement-arrow { color: #a0aec0; font-size: 20px; }
+        .replacement-to { color: #48bb78; font-weight: 600; }
+        .replacement-savings { text-align: right; }
+        .replacement-savings .amount { font-size: 22px; font-weight: bold; color: #48bb78; }
+        .replacement-reason { margin-top: 10px; font-size: 12px; color: #a0aec0; }
+        .replacement-actions { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
+
+        .apply-btn { background: #e53e3e; color: white; border: none; padding: 6px 16px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .apply-btn:hover { background: #c53030; }
+        .apply-btn.done { background: #48bb78; }
+
+        .ai-plan { background: #0f1419; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.8; font-size: 13px; max-height: 500px; overflow-y: auto; }
+
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+
+        @media (max-width: 768px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    </style>
+</head>
+<body>
+    {% set active = 'nodes' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <div class="subtitle">Analyzes your node groups and finds cheaper alternatives — Spot, smaller instances, or better instance families. One-click apply to replace.</div>
+
+        <button class="run-btn" id="analyzeBtn" onclick="analyze()">Analyze & Find Cheaper Nodes</button>
+
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat cost"><div class="number" id="currentCost">$0</div><div class="label">Current Monthly Cost</div></div>
+                <div class="stat savings"><div class="number" id="savings">$0</div><div class="label">Potential Savings</div></div>
+                <div class="stat optimized"><div class="number" id="optimized">$0</div><div class="label">Optimized Monthly Cost</div></div>
+                <div class="stat recs"><div class="number" id="recCount">0</div><div class="label">Replacements Found</div></div>
+            </div>
+
+            <!-- Node Groups -->
+            <div class="card">
+                <h3>Current Node Groups</h3>
+                <table>
+                    <thead>
+                        <tr><th>Node Group</th><th>Instance Type</th><th>Capacity</th><th>Nodes</th><th>Monthly Cost</th><th>CPU Util</th><th>Memory Util</th></tr>
+                    </thead>
+                    <tbody id="nodeGroupsBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Replacements -->
+            <div class="card">
+                <h3>Replacement Recommendations</h3>
+                <div id="replacementsDiv"></div>
+            </div>
+
+            <!-- AI Migration Plan -->
+            <div class="card">
+                <h3>AI Migration Plan</h3>
+                <div class="ai-plan" id="aiPlan"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function analyze() {
+            const btn = document.getElementById('analyzeBtn');
+            btn.textContent = 'Scanning node groups...';
+            btn.classList.add('loading');
+
+            try {
+                const resp = await fetch('/api/node-optimize', { method: 'POST' });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    alert('Failed: ' + (data.message || 'Unknown error'));
+                    btn.textContent = 'Analyze & Find Cheaper Nodes';
+                    btn.classList.remove('loading');
+                    return;
+                }
+
+                document.getElementById('currentCost').textContent = '$' + data.current_monthly_cost;
+                document.getElementById('savings').textContent = '$' + data.potential_savings;
+                document.getElementById('optimized').textContent = '$' + data.optimized_monthly_cost;
+                document.getElementById('recCount').textContent = data.replacements.length;
+
+                // Node groups table
+                let rows = '';
+                data.node_groups.forEach(g => {
+                    const badge = g.capacity_type === 'SPOT' ? 'badge-spot' : 'badge-ondemand';
+                    rows += `<tr>
+                        <td style="font-weight:600;">${g.name}</td>
+                        <td>${g.instance_type}</td>
+                        <td><span class="badge ${badge}">${g.capacity_type}</span></td>
+                        <td>${g.nodes}</td>
+                        <td>${g.monthly_cost}</td>
+                        <td>${g.avg_cpu_util}</td>
+                        <td>${g.avg_mem_util}</td>
+                    </tr>`;
+                });
+                document.getElementById('nodeGroupsBody').innerHTML = rows;
+
+                // Replacements
+                let repHtml = '';
+                data.replacements.forEach((r, i) => {
+                    const riskBadge = r.risk === 'low' ? 'badge-low' : r.risk === 'medium' ? 'badge-medium' : 'badge-high';
+                    const recType = r.recommended.split(' ')[0];
+                    const recCap = r.recommended.includes('SPOT') ? 'SPOT' : 'ON_DEMAND';
+
+                    repHtml += `<div class="replacement">
+                        <div class="replacement-header">
+                            <div>
+                                <div style="font-size:12px; color:#a0aec0; margin-bottom:5px;">${r.current_group}</div>
+                                <div class="replacement-flow">
+                                    <span class="replacement-from">${r.current}</span>
+                                    <span class="replacement-arrow">&rarr;</span>
+                                    <span class="replacement-to">${r.recommended}</span>
+                                </div>
+                            </div>
+                            <div class="replacement-savings">
+                                <div class="amount">${r.savings}</div>
+                                <div style="font-size:12px; color:#a0aec0;">${r.current_cost} &rarr; ${r.new_cost}</div>
+                            </div>
+                        </div>
+                        <div class="replacement-reason">${r.reason}</div>
+                        <div class="replacement-actions">
+                            <span class="badge ${riskBadge}">Risk: ${r.risk}</span>
+                            ${r.auto_executable
+                                ? `<button class="apply-btn" id="apply-${i}" onclick="applyReplace('${r.current_group}', '${recType}', '${recCap}', ${i})">Apply Replacement</button>`
+                                : '<span style="font-size:12px; color:#a0aec0;">Manual migration needed (capacity type change)</span>'
+                            }
+                        </div>
+                    </div>`;
+                });
+
+                if (data.replacements.length === 0) {
+                    repHtml = '<div style="padding:30px; text-align:center; color:#48bb78; font-size:16px;">All node groups are optimally configured!</div>';
+                }
+                document.getElementById('replacementsDiv').innerHTML = repHtml;
+
+                document.getElementById('aiPlan').textContent = data.ai_migration_plan;
+                document.getElementById('results').style.display = 'block';
+
+                btn.textContent = 'Analysis Complete';
+                btn.classList.remove('loading');
+                btn.classList.add('done');
+
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Analyze & Find Cheaper Nodes';
+                btn.classList.remove('loading');
+            }
+        }
+
+        async function applyReplace(nodeGroup, instanceType, capacityType, index) {
+            const btn = document.getElementById('apply-' + index);
+            if (!confirm(`Replace ${nodeGroup} with ${instanceType} (${capacityType})?\n\nThis will trigger a rolling update of the node group.`)) return;
+
+            btn.textContent = 'Applying...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/api/node-replace', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({node_group: nodeGroup, new_instance_type: instanceType, new_capacity_type: capacityType}),
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    btn.textContent = 'Applied!';
+                    btn.classList.add('done');
+                    alert('Success!\n\n' + data.message);
+                } else {
+                    let msg = data.message;
+                    if (data.manual_steps) {
+                        msg += '\n\nManual steps required:\n' + data.manual_steps.join('\n');
+                    }
+                    alert(msg);
+                    btn.textContent = 'Apply Replacement';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btn.textContent = 'Apply Replacement';
+                btn.disabled = false;
+            }
+        }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Predictions - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #63b3ed; }
+        .nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #63b3ed; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .btn { background: #63b3ed; color: #1a2332; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px; }
+        .btn:hover { background: #4299e1; }
+        .btn.loading { background: #a0aec0; cursor: wait; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .num { font-size: 28px; font-weight: bold; }
+        .stat .lbl { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin: 12px 0; }
+        .card h3 { color: #63b3ed; margin-bottom: 12px; }
+        .forecast-box { background: linear-gradient(135deg, #2a4365, #1a2332); border: 1px solid #63b3ed; border-radius: 12px; padding: 25px; margin: 15px 0; white-space: pre-wrap; line-height: 1.8; font-size: 14px; }
+        .anomaly { background: #0f1419; border-left: 3px solid; padding: 12px 15px; margin: 8px 0; border-radius: 0 6px 6px 0; font-size: 13px; }
+        .anomaly.critical { border-color: #fc8181; }
+        .anomaly.warning { border-color: #ecc94b; }
+        .anomaly .type { font-weight: 600; }
+        .anomaly .detail { color: #a0aec0; font-size: 12px; margin-top: 4px; }
+        .anomaly .action { color: #48bb78; font-size: 12px; margin-top: 4px; }
+        .capacity-box { background: #0f1419; border-radius: 8px; padding: 20px; margin: 10px 0; }
+        .capacity-box .plan { font-size: 16px; font-weight: 600; }
+        .capacity-box .detail { color: #a0aec0; font-size: 13px; margin-top: 8px; }
+        .confidence { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .conf-high { background: #22543d; color: #48bb78; }
+        .conf-medium { background: #744210; color: #ecc94b; }
+        .conf-low { background: #742a2a; color: #fc8181; }
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set active = 'predict' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="btn" id="btn" onclick="predict()">Run AI Prediction</button>
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat"><div class="num" id="nodes" style="color:#63b3ed;">0</div><div class="lbl">Nodes</div></div>
+                <div class="stat"><div class="num" id="cpuUtil" style="color:#48bb78;">0%</div><div class="lbl">CPU Utilization</div></div>
+                <div class="stat"><div class="num" id="memUtil" style="color:#ecc94b;">0%</div><div class="lbl">Memory Utilization</div></div>
+                <div class="stat"><div class="num" id="anomalyCount" style="color:#fc8181;">0</div><div class="lbl">Anomalies Detected</div></div>
+            </div>
+
+            <div class="card">
+                <h3>AI Usage Forecast <span class="confidence" id="confBadge"></span></h3>
+                <div class="forecast-box" id="forecast"></div>
+            </div>
+
+            <div class="card">
+                <h3>Anomaly Detection</h3>
+                <div id="anomalies"></div>
+            </div>
+
+            <div class="card">
+                <h3>Capacity Planning</h3>
+                <div class="capacity-box">
+                    <div class="plan" id="capPlan"></div>
+                    <div class="detail" id="capDetail"></div>
+                    <div id="capDays" style="margin-top:10px; font-size: 24px; font-weight: bold;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    async function predict() {
+        const btn = document.getElementById('btn'); btn.textContent='AI is analyzing...'; btn.classList.add('loading');
+        try {
+            const r = await fetch('/api/predict',{method:'POST'}); const d = await r.json();
+            if (!d.success) { alert(d.message); btn.textContent='Run AI Prediction'; btn.classList.remove('loading'); return; }
+
+            const cs = d.current_state;
+            document.getElementById('nodes').textContent = cs.node_count;
+            document.getElementById('cpuUtil').textContent = cs.cpu_utilization_pct + '%';
+            document.getElementById('memUtil').textContent = cs.mem_utilization_pct + '%';
+            document.getElementById('anomalyCount').textContent = d.anomalies.total;
+
+            // Forecast
+            const f = d.forecast;
+            document.getElementById('forecast').textContent = f.forecast;
+            const confCls = f.confidence === 'high' ? 'conf-high' : f.confidence === 'medium' ? 'conf-medium' : 'conf-low';
+            document.getElementById('confBadge').className = 'confidence ' + confCls;
+            document.getElementById('confBadge').textContent = 'Confidence: ' + f.confidence + ' (' + f.data_points + ' data points)';
+
+            // Anomalies
+            let aHtml = '';
+            (d.anomalies.anomalies || []).forEach(a => {
+                aHtml += `<div class="anomaly ${a.severity}"><div class="type">[${a.severity.toUpperCase()}] ${a.type}</div><div class="detail">${a.detail}</div><div class="action">Action: ${a.action}</div></div>`;
+            });
+            if (!aHtml) aHtml = '<div style="padding:20px;text-align:center;color:#48bb78;">No anomalies detected. Cluster is healthy.</div>';
+            document.getElementById('anomalies').innerHTML = aHtml;
+
+            // Capacity
+            const cp = d.capacity_planning;
+            document.getElementById('capPlan').textContent = cp.plan;
+            document.getElementById('capDetail').textContent = cp.recommendation;
+            if (cp.days_until_full) {
+                const color = cp.days_until_full < 7 ? '#fc8181' : cp.days_until_full < 30 ? '#ecc94b' : '#48bb78';
+                document.getElementById('capDays').innerHTML = `<span style="color:${color};">${cp.days_until_full} days until 90% capacity</span>`;
+            } else {
+                document.getElementById('capDays').innerHTML = '<span style="color:#48bb78;">No capacity concerns</span>';
+            }
+
+            document.getElementById('results').style.display = 'block';
+            btn.textContent='Refresh Prediction'; btn.classList.remove('loading');
+        } catch(e) { alert(e.message); btn.textContent='Run AI Prediction'; btn.classList.remove('loading'); }
+    }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

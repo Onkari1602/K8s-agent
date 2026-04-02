@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-healing-agent-depl
+  namespace: atlas
+  labels:
+    app: k8s-healing-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-healing-agent
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: k8s-healing-agent
+        self-healing: disabled
+    spec:
+      serviceAccountName: k8s-healing-agent-sa
+      containers:
+        - name: healing-agent
+          image: 766940073591.dkr.ecr.ap-south-1.amazonaws.com/k8s-healing-agent:v1
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: healing-agent-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; exit(0)"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os; exit(0)"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      restartPolicy: Always

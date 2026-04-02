@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: healing-agent-config
+  namespace: {{ .Values.namespace }}
+data:
+  MONITOR_INTERVAL: {{ .Values.config.monitorInterval | quote }}
+  MONITOR_NAMESPACES: {{ .Values.config.monitorNamespaces | quote }}
+  EXCLUDE_NAMESPACES: {{ .Values.config.excludeNamespaces | quote }}
+  BEDROCK_REGION: {{ .Values.bedrock.region | quote }}
+  BEDROCK_MODEL_ID: {{ .Values.bedrock.modelId | quote }}
+  BEDROCK_ENDPOINT_URL: {{ .Values.bedrock.endpointUrl | quote }}
+  BEDROCK_MAX_TOKENS: {{ .Values.bedrock.maxTokens | quote }}
+  AUTO_REMEDIATE: {{ .Values.config.autoRemediate | quote }}
+  DRY_RUN: {{ .Values.config.dryRun | quote }}
+  CONFIDENCE_THRESHOLD: {{ .Values.config.confidenceThreshold | quote }}
+  OOM_MEMORY_INCREASE_PERCENT: {{ .Values.config.oomMemoryIncreasePercent | quote }}
+  OOM_MEMORY_MAX_MI: {{ .Values.config.oomMemoryMaxMi | quote }}
+  REPORT_STORAGE: {{ .Values.config.reportStorage | quote }}
+  REPORT_NAMESPACE: {{ .Values.namespace | quote }}
+  REPORT_RETENTION_DAYS: {{ .Values.config.reportRetentionDays | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  COST_INTERVAL: {{ .Values.config.costInterval | quote }}
+  SPOT_CHECK_INTERVAL: {{ .Values.config.spotCheckInterval | quote }}
+  CLUSTER_NAME: {{ .Values.clusterName | quote }}
+  AWS_REGION: {{ .Values.awsRegion | quote }}

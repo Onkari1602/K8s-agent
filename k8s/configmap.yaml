@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: healing-agent-config
+  namespace: atlas
+data:
+  MONITOR_INTERVAL: "30"
+  MONITOR_NAMESPACES: ""
+  EXCLUDE_NAMESPACES: "kube-system,kube-public,kube-node-lease"
+  BEDROCK_REGION: "ap-south-1"
+  BEDROCK_MODEL_ID: "anthropic.claude-3-sonnet-20240229-v1:0"
+  BEDROCK_ENDPOINT_URL: ""
+  BEDROCK_MAX_TOKENS: "4096"
+  AUTO_REMEDIATE: "true"
+  DRY_RUN: "true"
+  CONFIDENCE_THRESHOLD: "0.7"
+  OOM_MEMORY_INCREASE_PERCENT: "50"
+  OOM_MEMORY_MAX_MI: "4096"
+  REPORT_STORAGE: "configmap"
+  REPORT_NAMESPACE: "atlas"
+  REPORT_RETENTION_DAYS: "30"
+  LOG_LEVEL: "INFO"

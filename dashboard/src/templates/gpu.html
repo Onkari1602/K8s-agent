@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Optimizer - K8s Healing Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1419; color: #e1e8ed; }
+        .header { background: #1a2332; padding: 20px 30px; border-bottom: 1px solid #2d3748; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #76e4f7; }
+        .nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .nav a { color: #a0aec0; text-decoration: none; font-size: 12px; padding: 4px 8px; border-radius: 4px; }
+        .nav a:hover, .nav a.active { background: #2d3748; color: #76e4f7; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .btn { background: #76e4f7; color: #1a2332; border: none; padding: 12px 30px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; margin: 10px 0 15px; }
+        .btn:hover { background: #4fd1c5; }
+        .btn.loading { background: #a0aec0; cursor: wait; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 18px; text-align: center; }
+        .stat .num { font-size: 28px; font-weight: bold; }
+        .stat .lbl { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+        .card { background: #1a2332; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin: 12px 0; }
+        .card h3 { color: #76e4f7; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 8px 12px; text-align: left; color: #a0aec0; font-size: 11px; text-transform: uppercase; background: #2d3748; }
+        td { padding: 8px 12px; border-bottom: 1px solid #2d374830; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .b-spot { background: #22543d; color: #48bb78; }
+        .b-od { background: #744210; color: #ecc94b; }
+        .rec { background: #0f1419; border: 1px solid #2d3748; border-radius: 8px; padding: 15px; margin: 8px 0; }
+        .rec-header { display: flex; justify-content: space-between; align-items: center; }
+        .rec-type { font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; background: #2a4365; color: #76e4f7; }
+        .rec-savings { font-size: 20px; font-weight: bold; color: #48bb78; }
+        .rec-detail { font-size: 12px; color: #a0aec0; margin-top: 6px; }
+        .ai-box { background: #0f1419; border-radius: 8px; padding: 20px; white-space: pre-wrap; line-height: 1.8; font-size: 13px; }
+        .no-gpu { text-align: center; padding: 40px; }
+        .no-gpu .icon { font-size: 48px; }
+        .no-gpu .msg { font-size: 16px; color: #a0aec0; margin-top: 10px; }
+        .user-info { color: #a0aec0; font-size: 13px; }
+        .logout-btn { background: #e53e3e; color: white; padding: 5px 12px; border-radius: 5px; font-size: 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set active = 'gpu' %}
+    {% include 'sidebar.html' %}
+
+    <div class="main-content">
+    <div class="container">
+        <button class="btn" id="btn" onclick="analyze()">Analyze GPU Infrastructure</button>
+        <div id="results" style="display:none;">
+            <div class="stats">
+                <div class="stat"><div class="num" id="gpuNodes" style="color:#76e4f7;">0</div><div class="lbl">GPU Nodes</div></div>
+                <div class="stat"><div class="num" id="totalGpus" style="color:#48bb78;">0</div><div class="lbl">Total GPUs</div></div>
+                <div class="stat"><div class="num" id="idleGpus" style="color:#ecc94b;">0</div><div class="lbl">Idle GPUs</div></div>
+                <div class="stat"><div class="num" id="gpuCost" style="color:#fc8181;">$0</div><div class="lbl">Monthly GPU Cost</div></div>
+            </div>
+            <div class="card"><h3>GPU Nodes</h3><table><thead><tr><th>Node</th><th>Instance</th><th>GPU</th><th>Type</th><th>Allocated</th><th>Free</th><th>Utilization</th><th>Capacity</th><th>Cost/mo</th></tr></thead><tbody id="nodesBody"></tbody></table></div>
+            <div class="card"><h3>GPU Pods</h3><table><thead><tr><th>Pod</th><th>Namespace</th><th>GPUs</th><th>Type</th><th>Node</th><th>Deployment</th><th>Status</th></tr></thead><tbody id="podsBody"></tbody></table></div>
+            <div class="card"><h3>Optimization Recommendations</h3><div id="recsDiv"></div></div>
+            <div class="card"><h3>AI GPU Analysis</h3><div class="ai-box" id="aiBox"></div></div>
+        </div>
+        <div id="noGpu" style="display:none;">
+            <div class="no-gpu">
+                <div class="icon">&#x1F4BB;</div>
+                <div class="msg" id="noGpuMsg">No GPU nodes detected</div>
+                <div class="ai-box" id="noGpuAi" style="text-align:left; margin-top:20px;"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+    async function analyze() {
+        const btn = document.getElementById('btn'); btn.textContent='Scanning GPUs...'; btn.classList.add('loading');
+        try {
+            const r = await fetch('/api/gpu-analyze',{method:'POST'}); const d = await r.json();
+            if (!d.success) { alert(d.message); btn.textContent='Analyze GPU Infrastructure'; btn.classList.remove('loading'); return; }
+
+            const s = d.summary;
+            if (s.gpu_nodes === 0) {
+                document.getElementById('noGpu').style.display = 'block';
+                document.getElementById('noGpuMsg').textContent = 'No GPU nodes detected in your cluster';
+                document.getElementById('noGpuAi').textContent = d.ai_summary;
+                btn.textContent='Rescan'; btn.classList.remove('loading');
+                return;
+            }
+
+            document.getElementById('gpuNodes').textContent = s.gpu_nodes;
+            document.getElementById('totalGpus').textContent = s.total_gpus;
+            document.getElementById('idleGpus').textContent = s.gpus_idle;
+            document.getElementById('gpuCost').textContent = '$' + s.monthly_gpu_cost;
+
+            let nHtml = '';
+            d.gpu_nodes.forEach(n => {
+                const cap = n.capacity_type === 'SPOT' ? 'b-spot' : 'b-od';
+                const utilColor = n.utilization_pct > 70 ? '#48bb78' : n.utilization_pct > 30 ? '#ecc94b' : '#fc8181';
+                nHtml += `<tr><td style="font-size:12px;">${n.name}</td><td>${n.instance_type}</td><td>${n.gpu_count}</td><td>${n.gpu_type}</td><td>${n.gpus_allocated}</td><td>${n.gpus_free}</td><td style="color:${utilColor};font-weight:600;">${n.utilization_pct}%</td><td><span class="badge ${cap}">${n.capacity_type}</span></td><td style="font-weight:600;">$${n.monthly_cost.toFixed(0)}</td></tr>`;
+            });
+            document.getElementById('nodesBody').innerHTML = nHtml || '<tr><td colspan="9" style="text-align:center;">No GPU nodes</td></tr>';
+
+            let pHtml = '';
+            d.gpu_pods.forEach(p => {
+                pHtml += `<tr><td style="font-size:12px;">${p.pod.split('/')[1]}</td><td>${p.namespace}</td><td style="font-weight:600;">${p.gpu_requested}</td><td>${p.gpu_type}</td><td style="font-size:12px;">${p.node}</td><td>${p.deployment}</td><td>${p.phase}</td></tr>`;
+            });
+            document.getElementById('podsBody').innerHTML = pHtml || '<tr><td colspan="7" style="text-align:center;">No GPU pods</td></tr>';
+
+            let rHtml = '';
+            (d.recommendations || []).forEach(r => {
+                rHtml += `<div class="rec"><div class="rec-header"><div><span class="rec-type">${r.type}</span> <strong style="margin-left:8px;">${r.target}</strong></div><div class="rec-savings">${r.savings}</div></div><div class="rec-detail">${r.detail}</div><div style="margin-top:5px;font-size:12px;color:#63b3ed;">Action: ${r.action}</div></div>`;
+            });
+            document.getElementById('recsDiv').innerHTML = rHtml || '<div style="padding:20px;text-align:center;color:#48bb78;">GPU infrastructure is optimally configured!</div>';
+
+            document.getElementById('aiBox').textContent = d.ai_summary;
+            document.getElementById('results').style.display = 'block';
+            btn.textContent='Refresh'; btn.classList.remove('loading');
+        } catch(e) { alert(e.message); btn.textContent='Analyze GPU Infrastructure'; btn.classList.remove('loading'); }
+    }
+    </script>
+    </div><!-- end main-content -->
+</body>
+</html>

@@ -104,3 +104,36 @@ config:
   logLevel: "INFO"
   costInterval: "300"
   spotCheckInterval: "30"
+
+# ============================================
+# Enterprise Features
+# ============================================
+enterprise:
+  # Slack notifications
+  slackWebhookUrl: ""
+  # Microsoft Teams notifications
+  teamsWebhookUrl: ""
+  # Email alerts (via AWS SES)
+  emailAlertsEnabled: "false"
+  alertEmailFrom: ""
+  alertEmailTo: ""
+  sesRegion: "ap-south-1"
+  # Custom webhook
+  customWebhookUrl: ""
+  # SLA targets
+  slaTargets: '{"uptime": 99.9, "mttr_minutes": 5}'
+  # Escalation (alert after N failed fixes)
+  escalationThreshold: "3"
+  # RBAC roles: {"email": "role"} where role is admin/operator/viewer
+  rbacConfig: '{"admin@agentichumans.in": "admin"}'
+  defaultUserRole: "viewer"
+
+# ============================================
+# Multi-Cloud
+# ============================================
+multiCloud:
+  awsRegions: "ap-south-1"
+  azureEnabled: "false"
+  azureSubscriptionId: ""
+  gcpEnabled: "false"
+  gcpProjectId: ""

@@ -811,6 +811,44 @@ async def node_replace(request: Request):
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
+@app.get("/api/multi-cloud")
+async def api_multi_cloud(request: Request):
+    if not auth.is_authenticated(request):
+        return JSONResponse({"success": False}, status_code=401)
+    try:
+        from .multi_cloud import MultiCloudManager
+        mgr = MultiCloudManager()
+        mgr.discover_all()
+        return {"success": True, "clusters": mgr.list_all()}
+    except Exception as e:
+        return {"success": True, "clusters": [], "error": str(e)}
+
+
+@app.get("/api/sla")
+async def api_sla(request: Request):
+    if not auth.is_authenticated(request):
+        return JSONResponse({"success": False}, status_code=401)
+    try:
+        from .enterprise import SLAMonitor
+        sla = SLAMonitor(core_v1)
+        return {"success": True, **sla.check()}
+    except Exception as e:
+        return {"success": True, "error": str(e)}
+
+
+@app.post("/api/test-notification")
+async def test_notification(request: Request):
+    if not auth.is_authenticated(request):
+        return JSONResponse({"success": False}, status_code=401)
+    try:
+        from .enterprise import NotificationManager
+        nm = NotificationManager()
+        nm.notify("🧪 Test Notification", "This is a test from K8s Healing Agent dashboard.", "info")
+        return {"success": True, "message": "Notification sent to all configured channels"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 @app.get("/api/action-log")
 async def action_log(request: Request):
     if not auth.is_authenticated(request):

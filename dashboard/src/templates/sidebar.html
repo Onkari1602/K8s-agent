@@ -29,12 +29,59 @@
     .aws-topbar-logo { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
     .aws-topbar-logo .cube { width: 24px; height: 24px; background: var(--aws-orange); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; }
     .aws-topbar-logo .name { color: var(--aws-text); font-size: 15px; font-weight: 600; }
-    .aws-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-    .aws-topbar-right .region { background: var(--aws-hover-bg); color: var(--aws-text); padding: 4px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--aws-border); }
+    .aws-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
     .aws-topbar-right .user-btn { color: var(--aws-text); font-size: 12px; padding: 4px 10px; border-radius: 4px; text-decoration: none; }
     .aws-topbar-right .user-btn:hover { background: var(--aws-hover-bg); }
     .aws-topbar-right .signout { color: var(--aws-orange); font-size: 12px; text-decoration: none; padding: 4px 10px; }
     .aws-topbar-right .signout:hover { text-decoration: underline; }
+
+    /* Cloud Switcher */
+    .cloud-switcher { position: relative; display: inline-block; }
+    .cloud-btn {
+        display: flex; align-items: center; gap: 6px; padding: 4px 12px;
+        background: var(--aws-hover-bg); border: 1px solid var(--aws-border);
+        border-radius: 4px; color: var(--aws-text); font-size: 12px;
+        cursor: pointer; white-space: nowrap;
+    }
+    .cloud-btn:hover { background: #334455; border-color: var(--aws-orange); }
+    .cloud-btn .cloud-icon { font-size: 14px; }
+    .cloud-btn .arrow { font-size: 10px; margin-left: 4px; }
+
+    .cloud-dropdown {
+        display: none; position: absolute; top: 100%; right: 0; margin-top: 4px;
+        background: var(--aws-dark); border: 1px solid var(--aws-border);
+        border-radius: 8px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        z-index: 400; overflow: hidden;
+    }
+    .cloud-dropdown.show { display: block; }
+    .cloud-dropdown-header { padding: 10px 14px; font-size: 11px; font-weight: 700; color: var(--aws-text-light); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--aws-border); }
+
+    .cloud-section { padding: 6px 0; }
+    .cloud-section-title { padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--aws-orange); display: flex; align-items: center; gap: 6px; }
+    .cloud-option {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 14px 6px 28px; font-size: 12px; color: var(--aws-text);
+        cursor: pointer; transition: background 0.1s;
+    }
+    .cloud-option:hover { background: var(--aws-hover-bg); }
+    .cloud-option.active { background: var(--aws-active-bg); color: #fff; }
+    .cloud-option .region-name { font-weight: 500; }
+    .cloud-option .cluster-count { font-size: 11px; color: var(--aws-text-light); background: var(--aws-darker); padding: 1px 6px; border-radius: 3px; }
+    .cloud-option .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .cloud-option .status-dot.connected { background: #48bb78; }
+    .cloud-option .status-dot.disconnected { background: #e53e3e; }
+
+    .cloud-divider { height: 1px; background: var(--aws-border); margin: 4px 14px; }
+    .cloud-add { padding: 8px 14px; font-size: 12px; color: var(--aws-orange); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .cloud-add:hover { background: var(--aws-hover-bg); }
+
+    /* Region badge */
+    .region-badge {
+        display: flex; align-items: center; gap: 5px; padding: 4px 10px;
+        background: var(--aws-hover-bg); border: 1px solid var(--aws-border);
+        border-radius: 4px; font-size: 12px; color: var(--aws-text);
+    }
+    .region-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #48bb78; }
 
     /* Sidebar */
     .sidebar {
@@ -125,7 +172,106 @@
         <span class="name">K8s Healing Agent</span>
     </div>
     <div class="aws-topbar-right">
-        <span class="region">ap-south-1</span>
+        <!-- Cloud Switcher -->
+        <div class="cloud-switcher">
+            <div class="cloud-btn" onclick="toggleCloudDropdown()">
+                <span class="cloud-icon" id="activeCloudIcon">🟠</span>
+                <span id="activeCloudName">AWS</span>
+                <span>|</span>
+                <span id="activeRegion">ap-south-1</span>
+                <span class="arrow">&#9660;</span>
+            </div>
+            <div class="cloud-dropdown" id="cloudDropdown">
+                <div class="cloud-dropdown-header">Switch Cloud & Region</div>
+
+                <!-- AWS -->
+                <div class="cloud-section">
+                    <div class="cloud-section-title">🟠 Amazon Web Services</div>
+                    <div class="cloud-option active" onclick="selectCloud('aws','ap-south-1','🟠','AWS')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot connected"></span>
+                            <span class="region-name">ap-south-1</span>
+                            <span style="color:#687078;font-size:11px;">Mumbai</span>
+                        </div>
+                        <span class="cluster-count">1 cluster</span>
+                    </div>
+                    <div class="cloud-option" onclick="selectCloud('aws','us-east-1','🟠','AWS')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">us-east-1</span>
+                            <span style="color:#687078;font-size:11px;">N. Virginia</span>
+                        </div>
+                        <span class="cluster-count">0 clusters</span>
+                    </div>
+                    <div class="cloud-option" onclick="selectCloud('aws','eu-west-1','🟠','AWS')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">eu-west-1</span>
+                            <span style="color:#687078;font-size:11px;">Ireland</span>
+                        </div>
+                        <span class="cluster-count">0 clusters</span>
+                    </div>
+                </div>
+
+                <div class="cloud-divider"></div>
+
+                <!-- Azure -->
+                <div class="cloud-section">
+                    <div class="cloud-section-title">🔵 Microsoft Azure</div>
+                    <div class="cloud-option" onclick="selectCloud('azure','eastus','🔵','Azure')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">eastus</span>
+                            <span style="color:#687078;font-size:11px;">East US</span>
+                        </div>
+                        <span class="cluster-count">Not connected</span>
+                    </div>
+                    <div class="cloud-option" onclick="selectCloud('azure','westeurope','🔵','Azure')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">westeurope</span>
+                            <span style="color:#687078;font-size:11px;">West Europe</span>
+                        </div>
+                        <span class="cluster-count">Not connected</span>
+                    </div>
+                </div>
+
+                <div class="cloud-divider"></div>
+
+                <!-- GCP -->
+                <div class="cloud-section">
+                    <div class="cloud-section-title">🔴 Google Cloud Platform</div>
+                    <div class="cloud-option" onclick="selectCloud('gcp','us-central1','🔴','GCP')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">us-central1</span>
+                            <span style="color:#687078;font-size:11px;">Iowa</span>
+                        </div>
+                        <span class="cluster-count">Not connected</span>
+                    </div>
+                    <div class="cloud-option" onclick="selectCloud('gcp','asia-south1','🔴','GCP')">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-dot disconnected"></span>
+                            <span class="region-name">asia-south1</span>
+                            <span style="color:#687078;font-size:11px;">Mumbai</span>
+                        </div>
+                        <span class="cluster-count">Not connected</span>
+                    </div>
+                </div>
+
+                <div class="cloud-divider"></div>
+                <div class="cloud-add" onclick="alert('To add a cloud:\\n\\nAWS: Set AWS_REGIONS env var\\nAzure: Set AZURE_ENABLED=true + credentials\\nGCP: Set GCP_ENABLED=true + credentials\\n\\nSee deployment guide for details.')">
+                    ➕ Add Cloud / Region
+                </div>
+            </div>
+        </div>
+
+        <!-- Region Badge -->
+        <div class="region-badge">
+            <span class="dot"></span>
+            <span id="regionBadge">ap-south-1</span>
+        </div>
+
         {% if user %}
         <span class="user-btn">{{ user.email }}</span>
         <a href="/auth/logout" class="signout">Sign out</a>
@@ -215,4 +361,69 @@ function filterNav(query) {
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => document.getElementById('sidebar').classList.remove('open'));
 });
+
+// Cloud switcher
+function toggleCloudDropdown() {
+    document.getElementById('cloudDropdown').classList.toggle('show');
+}
+
+function selectCloud(cloud, region, icon, name) {
+    document.getElementById('activeCloudIcon').textContent = icon;
+    document.getElementById('activeCloudName').textContent = name;
+    document.getElementById('activeRegion').textContent = region;
+    document.getElementById('regionBadge').textContent = region;
+    document.getElementById('cloudDropdown').classList.remove('show');
+
+    // Update active state
+    document.querySelectorAll('.cloud-option').forEach(o => o.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+
+    // Store selection
+    localStorage.setItem('selectedCloud', cloud);
+    localStorage.setItem('selectedRegion', region);
+
+    // Reload data for selected cloud/region
+    if (typeof loadForCloud === 'function') loadForCloud(cloud, region);
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.cloud-switcher')) {
+        document.getElementById('cloudDropdown').classList.remove('show');
+    }
+});
+
+// Restore saved selection
+const savedCloud = localStorage.getItem('selectedCloud');
+const savedRegion = localStorage.getItem('selectedRegion');
+if (savedCloud && savedRegion) {
+    const icons = {aws: '🟠', azure: '🔵', gcp: '🔴'};
+    const names = {aws: 'AWS', azure: 'Azure', gcp: 'GCP'};
+    document.getElementById('activeCloudIcon').textContent = icons[savedCloud] || '🟠';
+    document.getElementById('activeCloudName').textContent = names[savedCloud] || 'AWS';
+    document.getElementById('activeRegion').textContent = savedRegion;
+    document.getElementById('regionBadge').textContent = savedRegion;
+}
+
+// Load clusters dynamically
+async function loadCloudClusters() {
+    try {
+        const resp = await fetch('/api/multi-cloud');
+        const data = await resp.json();
+        if (data.success && data.clusters) {
+            // Update cluster counts in dropdown
+            data.clusters.forEach(c => {
+                document.querySelectorAll('.cloud-option').forEach(opt => {
+                    if (opt.textContent.includes(c.region) && opt.closest('.cloud-section').textContent.includes(c.cloud.toUpperCase())) {
+                        const countEl = opt.querySelector('.cluster-count');
+                        if (countEl) countEl.textContent = c.nodes + ' nodes';
+                        const dot = opt.querySelector('.status-dot');
+                        if (dot) { dot.classList.remove('disconnected'); dot.classList.add('connected'); }
+                    }
+                });
+            });
+        }
+    } catch(e) {}
+}
+loadCloudClusters();
 </script>

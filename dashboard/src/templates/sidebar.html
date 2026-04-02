@@ -175,7 +175,7 @@
         <!-- Cloud Switcher -->
         <div class="cloud-switcher">
             <div class="cloud-btn" onclick="toggleCloudDropdown()">
-                <span class="cloud-icon" id="activeCloudIcon">🟠</span>
+                <img id="activeCloudLogo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/150px-Amazon_Web_Services_Logo.svg.png" alt="AWS" style="height:14px;filter:brightness(1.3);">
                 <span id="activeCloudName">AWS</span>
                 <span>|</span>
                 <span id="activeRegion">ap-south-1</span>
@@ -186,7 +186,7 @@
 
                 <!-- AWS -->
                 <div class="cloud-section">
-                    <div class="cloud-section-title">🟠 Amazon Web Services</div>
+                    <div class="cloud-section-title"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/150px-Amazon_Web_Services_Logo.svg.png" alt="AWS" style="height:16px;vertical-align:middle;margin-right:4px;filter:brightness(1.3);"> Amazon Web Services</div>
                     <div class="cloud-option active" onclick="selectCloud('aws','ap-south-1','🟠','AWS')">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="status-dot connected"></span>
@@ -217,7 +217,7 @@
 
                 <!-- Azure -->
                 <div class="cloud-section">
-                    <div class="cloud-section-title">🔵 Microsoft Azure</div>
+                    <div class="cloud-section-title"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Microsoft_Azure.svg/150px-Microsoft_Azure.svg.png" alt="Azure" style="height:16px;vertical-align:middle;margin-right:4px;"> Microsoft Azure</div>
                     <div class="cloud-option" onclick="selectCloud('azure','eastus','🔵','Azure')">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="status-dot disconnected"></span>
@@ -240,7 +240,7 @@
 
                 <!-- GCP -->
                 <div class="cloud-section">
-                    <div class="cloud-section-title">🔴 Google Cloud Platform</div>
+                    <div class="cloud-section-title"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Google_Cloud_logo.svg/150px-Google_Cloud_logo.svg.png" alt="GCP" style="height:14px;vertical-align:middle;margin-right:4px;"> Google Cloud Platform</div>
                     <div class="cloud-option" onclick="selectCloud('gcp','us-central1','🔴','GCP')">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="status-dot disconnected"></span>
@@ -367,8 +367,15 @@ function toggleCloudDropdown() {
     document.getElementById('cloudDropdown').classList.toggle('show');
 }
 
+const cloudLogos = {
+    aws: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/150px-Amazon_Web_Services_Logo.svg.png',
+    azure: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Microsoft_Azure.svg/150px-Microsoft_Azure.svg.png',
+    gcp: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Google_Cloud_logo.svg/150px-Google_Cloud_logo.svg.png',
+};
+
 function selectCloud(cloud, region, icon, name) {
-    document.getElementById('activeCloudIcon').textContent = icon;
+    document.getElementById('activeCloudLogo').src = cloudLogos[cloud] || cloudLogos.aws;
+    document.getElementById('activeCloudLogo').style.filter = cloud === 'aws' ? 'brightness(1.3)' : '';
     document.getElementById('activeCloudName').textContent = name;
     document.getElementById('activeRegion').textContent = region;
     document.getElementById('regionBadge').textContent = region;
@@ -400,9 +407,9 @@ document.addEventListener('click', function(e) {
 const savedCloud = localStorage.getItem('selectedCloud');
 const savedRegion = localStorage.getItem('selectedRegion');
 if (savedCloud && savedRegion) {
-    const icons = {aws: '🟠', azure: '🔵', gcp: '🔴'};
     const names = {aws: 'AWS', azure: 'Azure', gcp: 'GCP'};
-    document.getElementById('activeCloudIcon').textContent = icons[savedCloud] || '🟠';
+    document.getElementById('activeCloudLogo').src = cloudLogos[savedCloud] || cloudLogos.aws;
+    document.getElementById('activeCloudLogo').style.filter = savedCloud === 'aws' ? 'brightness(1.3)' : '';
     document.getElementById('activeCloudName').textContent = names[savedCloud] || 'AWS';
     document.getElementById('activeRegion').textContent = savedRegion;
     document.getElementById('regionBadge').textContent = savedRegion;

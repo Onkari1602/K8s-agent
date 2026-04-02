@@ -187,76 +187,7 @@
                 <!-- AWS -->
                 <div class="cloud-section">
                     <div class="cloud-section-title"><span id="awsLogo" style="display:inline-flex;align-items:center;margin-right:4px;"></span> Amazon Web Services</div>
-                    <div class="cloud-option active" onclick="selectCloud('aws','ap-south-1','🟠','AWS')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot connected"></span>
-                            <span class="region-name">ap-south-1</span>
-                            <span style="color:#687078;font-size:11px;">Mumbai</span>
-                        </div>
-                        <span class="cluster-count">1 cluster</span>
-                    </div>
-                    <div class="cloud-option" onclick="selectCloud('aws','us-east-1','🟠','AWS')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">us-east-1</span>
-                            <span style="color:#687078;font-size:11px;">N. Virginia</span>
-                        </div>
-                        <span class="cluster-count">0 clusters</span>
-                    </div>
-                    <div class="cloud-option" onclick="selectCloud('aws','eu-west-1','🟠','AWS')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">eu-west-1</span>
-                            <span style="color:#687078;font-size:11px;">Ireland</span>
-                        </div>
-                        <span class="cluster-count">0 clusters</span>
-                    </div>
-                </div>
-
-                <div class="cloud-divider"></div>
-
-                <!-- Azure -->
-                <div class="cloud-section">
-                    <div class="cloud-section-title"><span id="azureLogo" style="display:inline-flex;align-items:center;margin-right:4px;"></span> Microsoft Azure</div>
-                    <div class="cloud-option" onclick="selectCloud('azure','eastus','🔵','Azure')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">eastus</span>
-                            <span style="color:#687078;font-size:11px;">East US</span>
-                        </div>
-                        <span class="cluster-count">Not connected</span>
-                    </div>
-                    <div class="cloud-option" onclick="selectCloud('azure','westeurope','🔵','Azure')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">westeurope</span>
-                            <span style="color:#687078;font-size:11px;">West Europe</span>
-                        </div>
-                        <span class="cluster-count">Not connected</span>
-                    </div>
-                </div>
-
-                <div class="cloud-divider"></div>
-
-                <!-- GCP -->
-                <div class="cloud-section">
-                    <div class="cloud-section-title"><span id="gcpLogo" style="display:inline-flex;align-items:center;margin-right:4px;"></span> Google Cloud Platform</div>
-                    <div class="cloud-option" onclick="selectCloud('gcp','us-central1','🔴','GCP')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">us-central1</span>
-                            <span style="color:#687078;font-size:11px;">Iowa</span>
-                        </div>
-                        <span class="cluster-count">Not connected</span>
-                    </div>
-                    <div class="cloud-option" onclick="selectCloud('gcp','asia-south1','🔴','GCP')">
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="status-dot disconnected"></span>
-                            <span class="region-name">asia-south1</span>
-                            <span style="color:#687078;font-size:11px;">Mumbai</span>
-                        </div>
-                        <span class="cluster-count">Not connected</span>
-                    </div>
+                    <div id="cloudRegionsList">Loading...</div>
                 </div>
 
                 <div class="cloud-divider"></div>
@@ -419,25 +350,91 @@ if (savedCloud && savedRegion) {
     document.getElementById('regionBadge').textContent = savedRegion;
 }
 
-// Load clusters dynamically
+// Load clusters dynamically and build dropdown
+const regionNames = {
+    'ap-south-1': 'Mumbai', 'us-east-1': 'N. Virginia', 'us-west-2': 'Oregon',
+    'eu-west-1': 'Ireland', 'eu-central-1': 'Frankfurt', 'ap-southeast-1': 'Singapore',
+    'eastus': 'East US', 'westeurope': 'West Europe', 'westus2': 'West US 2',
+    'centralindia': 'Central India', 'northeurope': 'North Europe',
+    'us-central1': 'Iowa', 'us-east4': 'Virginia', 'asia-south1': 'Mumbai',
+    'europe-west1': 'Belgium', 'asia-southeast1': 'Singapore',
+};
+
 async function loadCloudClusters() {
+    const container = document.getElementById('cloudRegionsList');
     try {
         const resp = await fetch('/api/multi-cloud');
         const data = await resp.json();
+
+        // Group by cloud
+        const clouds = {aws: [], azure: [], gcp: []};
         if (data.success && data.clusters) {
-            // Update cluster counts in dropdown
             data.clusters.forEach(c => {
-                document.querySelectorAll('.cloud-option').forEach(opt => {
-                    if (opt.textContent.includes(c.region) && opt.closest('.cloud-section').textContent.includes(c.cloud.toUpperCase())) {
-                        const countEl = opt.querySelector('.cluster-count');
-                        if (countEl) countEl.textContent = c.nodes + ' nodes';
-                        const dot = opt.querySelector('.status-dot');
-                        if (dot) { dot.classList.remove('disconnected'); dot.classList.add('connected'); }
-                    }
-                });
+                if (clouds[c.cloud]) clouds[c.cloud].push(c);
             });
         }
-    } catch(e) {}
+
+        // Also add known regions with no clusters
+        const awsRegions = (document.querySelector('meta[name="aws-regions"]') || {}).content || 'ap-south-1';
+
+        let html = '';
+
+        // AWS Section
+        const awsLogoHtml = cloudLogos.aws;
+        html += '<div class="cloud-section"><div class="cloud-section-title"><span style="display:inline-flex;align-items:center;margin-right:4px;">' + awsLogoHtml + '</span> Amazon Web Services</div>';
+        if (clouds.aws.length > 0) {
+            clouds.aws.forEach(c => {
+                const isActive = localStorage.getItem('selectedCloud') === 'aws' && localStorage.getItem('selectedRegion') === c.region;
+                html += '<div class="cloud-option ' + (isActive ? 'active' : '') + '" onclick="selectCloud(\'aws\',\'' + c.region + '\',\'\',\'AWS\')">';
+                html += '<div style="display:flex;align-items:center;gap:8px;"><span class="status-dot connected"></span>';
+                html += '<span class="region-name">' + c.region + '</span>';
+                html += '<span style="color:#687078;font-size:11px;">' + (regionNames[c.region] || '') + '</span></div>';
+                html += '<span class="cluster-count">' + c.nodes + ' nodes</span></div>';
+            });
+        } else {
+            html += '<div class="cloud-option" style="color:#687078;cursor:default;"><div style="display:flex;align-items:center;gap:8px;"><span class="status-dot disconnected"></span><span>No clusters discovered</span></div></div>';
+        }
+        html += '</div><div class="cloud-divider"></div>';
+
+        // Azure Section
+        const azureLogoHtml = cloudLogos.azure;
+        html += '<div class="cloud-section"><div class="cloud-section-title"><span style="display:inline-flex;align-items:center;margin-right:4px;">' + azureLogoHtml + '</span> Microsoft Azure</div>';
+        if (clouds.azure.length > 0) {
+            clouds.azure.forEach(c => {
+                const isActive = localStorage.getItem('selectedCloud') === 'azure' && localStorage.getItem('selectedRegion') === c.region;
+                html += '<div class="cloud-option ' + (isActive ? 'active' : '') + '" onclick="selectCloud(\'azure\',\'' + c.region + '\',\'\',\'Azure\')">';
+                html += '<div style="display:flex;align-items:center;gap:8px;"><span class="status-dot connected"></span>';
+                html += '<span class="region-name">' + c.region + '</span>';
+                html += '<span style="color:#687078;font-size:11px;">' + (regionNames[c.region] || '') + '</span></div>';
+                html += '<span class="cluster-count">' + c.nodes + ' nodes</span></div>';
+            });
+        } else {
+            html += '<div class="cloud-option" style="color:#687078;cursor:default;"><div style="display:flex;align-items:center;gap:8px;"><span class="status-dot disconnected"></span><span>Not connected — Set AZURE credentials</span></div></div>';
+        }
+        html += '</div><div class="cloud-divider"></div>';
+
+        // GCP Section
+        const gcpLogoHtml = cloudLogos.gcp;
+        html += '<div class="cloud-section"><div class="cloud-section-title"><span style="display:inline-flex;align-items:center;margin-right:4px;">' + gcpLogoHtml + '</span> Google Cloud Platform</div>';
+        if (clouds.gcp.length > 0) {
+            clouds.gcp.forEach(c => {
+                const isActive = localStorage.getItem('selectedCloud') === 'gcp' && localStorage.getItem('selectedRegion') === c.region;
+                html += '<div class="cloud-option ' + (isActive ? 'active' : '') + '" onclick="selectCloud(\'gcp\',\'' + c.region + '\',\'\',\'GCP\')">';
+                html += '<div style="display:flex;align-items:center;gap:8px;"><span class="status-dot connected"></span>';
+                html += '<span class="region-name">' + c.region + '</span>';
+                html += '<span style="color:#687078;font-size:11px;">' + (regionNames[c.region] || '') + '</span></div>';
+                html += '<span class="cluster-count">' + c.nodes + ' nodes</span></div>';
+            });
+        } else {
+            html += '<div class="cloud-option" style="color:#687078;cursor:default;"><div style="display:flex;align-items:center;gap:8px;"><span class="status-dot disconnected"></span><span>Not connected — Set GCP credentials</span></div></div>';
+        }
+        html += '</div>';
+
+        container.innerHTML = html;
+
+    } catch(e) {
+        container.innerHTML = '<div style="padding:10px;color:#687078;">Failed to load clusters</div>';
+    }
 }
 loadCloudClusters();
 </script>

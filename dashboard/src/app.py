@@ -32,8 +32,10 @@ _cloud_clients = {}
 
 
 def get_clients(cloud: str = "", region: str = ""):
-    """Get K8s clients for the selected cloud/region. Falls back to local cluster."""
-    if not cloud or (cloud == "aws" and region == os.getenv("AWS_REGION", "ap-south-1")):
+    """Get K8s clients for the selected cloud/region. Returns None,None if no cluster found."""
+    local_region = os.getenv("AWS_REGION", "ap-south-1")
+
+    if not cloud or (cloud == "aws" and region == local_region):
         return core_v1, apps_v1
 
     cache_key = f"{cloud}/{region}"
@@ -51,7 +53,8 @@ def get_clients(cloud: str = "", region: str = ""):
     except Exception as e:
         logger.error(f"Multi-cloud client error for {cloud}/{region}: {e}")
 
-    return core_v1, apps_v1
+    # No cluster found in this cloud/region — return None
+    return None, None
 
 REPORT_NAMESPACE = os.getenv("REPORT_NAMESPACE", "atlas")
 EXCLUDE_NAMESPACES = os.getenv("EXCLUDE_NAMESPACES", "kube-system,kube-public,kube-node-lease").split(",")
@@ -167,7 +170,25 @@ async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Op
         return redirect
     user = auth.get_session(request) or {"email": "anonymous", "name": "Anonymous"}
 
-    c_v1, a_v1 = get_clients(cloud or "", region or "")
+    selected_cloud = cloud or ""
+    selected_region = region or ""
+    c_v1, a_v1 = get_clients(selected_cloud, selected_region)
+
+    # No cluster found in this cloud/region
+    no_cluster = c_v1 is None
+    if no_cluster:
+        cloud_names = {"aws": "AWS", "azure": "Azure", "gcp": "GCP"}
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request,
+            "namespaces": [],
+            "selected_namespace": "",
+            "total": 0, "healthy": 0, "unhealthy": 0, "critical": 0, "warning": 0,
+            "issues": [], "reports": [], "pods": [],
+            "user": user,
+            "no_cluster": True,
+            "no_cluster_cloud": cloud_names.get(selected_cloud, selected_cloud),
+            "no_cluster_region": selected_region,
+        })
 
     namespaces = [
         ns.metadata.name for ns in c_v1.list_namespace().items
@@ -209,12 +230,17 @@ async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Op
         "reports": reports,
         "pods": pods_data,
         "user": user,
+        "no_cluster": False,
+        "no_cluster_cloud": "",
+        "no_cluster_region": "",
     })
 
 
 @app.get("/api/pods")
 async def api_pods(namespace: Optional[str] = None, cloud: Optional[str] = None, region: Optional[str] = None):
     c_v1, _ = get_clients(cloud or "", region or "")
+    if c_v1 is None:
+        return []
     namespaces = [namespace] if namespace else [
         ns.metadata.name for ns in c_v1.list_namespace().items
         if ns.metadata.name not in EXCLUDE_NAMESPACES

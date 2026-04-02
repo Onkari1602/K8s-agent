@@ -106,6 +106,27 @@
     </div>
 
     <div class="container">
+        {% if no_cluster %}
+        <div style="text-align:center; padding:60px 20px; background:white; border:1px solid #d5dbdb; border-radius:8px; margin:20px 0;">
+            <div style="font-size:48px; margin-bottom:15px;">&#9729;</div>
+            <h2 style="color:#16191f; margin-bottom:10px;">No clusters found in {{ no_cluster_cloud }} {{ no_cluster_region }}</h2>
+            <p style="color:#687078; font-size:14px; max-width:500px; margin:0 auto;">
+                There are no Kubernetes clusters connected in this cloud/region.
+                {% if no_cluster_cloud == 'Azure' %}
+                    Set <code>AZURE_SUBSCRIPTION_ID</code> and Azure credentials to connect AKS clusters.
+                {% elif no_cluster_cloud == 'GCP' %}
+                    Set <code>GCP_PROJECT_ID</code> and GCP service account to connect GKE clusters.
+                {% else %}
+                    No EKS clusters found in <strong>{{ no_cluster_region }}</strong>. Create a cluster or check your AWS permissions.
+                {% endif %}
+            </p>
+            <div style="margin-top:20px;">
+                <a href="/?cloud=aws&region=ap-south-1" style="background:#ff9900; color:#16191f; padding:8px 20px; border-radius:4px; text-decoration:none; font-weight:600; font-size:13px;">Switch to AWS ap-south-1</a>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not no_cluster %}
         <!-- Stats -->
         <div class="stats">
             <div class="stat-card total"><div class="number">{{ total }}</div><div class="label">Total Pods</div></div>
@@ -281,6 +302,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Report Modal -->
     <div class="modal-overlay" id="reportModal">

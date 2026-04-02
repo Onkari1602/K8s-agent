@@ -5,8 +5,9 @@
     .sidebar-toggle { padding: 18px 20px; cursor: pointer; color: #63b3ed; font-size: 20px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 12px; }
     .sidebar-toggle:hover { background: #2d3748; }
     .sidebar-toggle .label { font-size: 14px; font-weight: 600; white-space: nowrap; }
-    .hamburger { position: fixed; top: 15px; left: 15px; z-index: 201; cursor: pointer; background: #1a2332; border: 1px solid #2d3748; border-radius: 8px; padding: 8px 12px; color: #63b3ed; font-size: 20px; }
+    .hamburger { position: fixed; top: 15px; left: 15px; z-index: 201; cursor: pointer; background: #1a2332; border: 1px solid #2d3748; border-radius: 8px; padding: 8px 12px; color: #63b3ed; font-size: 20px; display: flex; align-items: center; gap: 10px; }
     .hamburger:hover { background: #2d3748; }
+    .hamburger .title { font-size: 14px; font-weight: 600; color: #63b3ed; }
     .sidebar.open ~ .hamburger { display: none; }
     .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
     .sidebar-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: #a0aec0; text-decoration: none; font-size: 13px; white-space: nowrap; transition: all 0.2s; border-left: 3px solid transparent; }
@@ -31,7 +32,7 @@
     }
 </style>
 
-<div class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</div>
+<div class="hamburger" id="hamburger" onclick="toggleSidebar()"><span>&#9776;</span><span class="title">K8s Healing Agent</span></div>
 <div class="sidebar" id="sidebar">
     <div class="sidebar-toggle" onclick="toggleSidebar()">
         <span>&#9776;</span>

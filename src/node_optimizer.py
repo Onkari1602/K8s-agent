@@ -187,7 +187,7 @@ class NodeOptimizer:
                     ],
                 }
 
-            self.eks.update_nodegroup_config(
+            self.eks.update_nodegroup_version(
                 clusterName=self.cluster_name,
                 nodegroupName=node_group_name,
                 launchTemplate={"id": lt_id, "version": str(new_version)},

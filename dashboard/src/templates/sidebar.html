@@ -382,8 +382,11 @@ function selectCloud(cloud, region, icon, name) {
     localStorage.setItem('selectedCloud', cloud);
     localStorage.setItem('selectedRegion', region);
 
-    // Reload data for selected cloud/region
-    if (typeof loadForCloud === 'function') loadForCloud(cloud, region);
+    // Reload page with cloud/region params
+    const url = new URL(window.location.href);
+    url.searchParams.set('cloud', cloud);
+    url.searchParams.set('region', region);
+    window.location.href = url.toString();
 }
 
 // Close dropdown on outside click

@@ -26,6 +26,33 @@ def require_auth(request: Request):
         return RedirectResponse(url="/login")
     return None
 
+
+# Multi-cloud client cache
+_cloud_clients = {}
+
+
+def get_clients(cloud: str = "", region: str = ""):
+    """Get K8s clients for the selected cloud/region. Falls back to local cluster."""
+    if not cloud or (cloud == "aws" and region == os.getenv("AWS_REGION", "ap-south-1")):
+        return core_v1, apps_v1
+
+    cache_key = f"{cloud}/{region}"
+    if cache_key in _cloud_clients:
+        return _cloud_clients[cache_key]
+
+    try:
+        from .multi_cloud import MultiCloudManager
+        mgr = MultiCloudManager()
+        mgr.discover_all()
+        for cluster in mgr.clusters.values():
+            if cluster.cloud == cloud and cluster.region == region and cluster.core_v1:
+                _cloud_clients[cache_key] = (cluster.core_v1, cluster.apps_v1)
+                return cluster.core_v1, cluster.apps_v1
+    except Exception as e:
+        logger.error(f"Multi-cloud client error for {cloud}/{region}: {e}")
+
+    return core_v1, apps_v1
+
 REPORT_NAMESPACE = os.getenv("REPORT_NAMESPACE", "atlas")
 EXCLUDE_NAMESPACES = os.getenv("EXCLUDE_NAMESPACES", "kube-system,kube-public,kube-node-lease").split(",")
 
@@ -134,14 +161,16 @@ def _age(ts):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, namespace: Optional[str] = None):
+async def dashboard(request: Request, namespace: Optional[str] = None, cloud: Optional[str] = None, region: Optional[str] = None):
     redirect = require_auth(request)
     if redirect:
         return redirect
     user = auth.get_session(request) or {"email": "anonymous", "name": "Anonymous"}
 
+    c_v1, a_v1 = get_clients(cloud or "", region or "")
+
     namespaces = [
-        ns.metadata.name for ns in core_v1.list_namespace().items
+        ns.metadata.name for ns in c_v1.list_namespace().items
         if ns.metadata.name not in EXCLUDE_NAMESPACES
     ]
 
@@ -150,7 +179,7 @@ async def dashboard(request: Request, namespace: Optional[str] = None):
 
     for ns in target_ns:
         try:
-            pods = core_v1.list_namespaced_pod(ns)
+            pods = c_v1.list_namespaced_pod(ns)
             for pod in pods.items:
                 pods_data.append(classify_pod(pod))
         except Exception as e:
@@ -184,15 +213,16 @@ async def dashboard(request: Request, namespace: Optional[str] = None):
 
 
 @app.get("/api/pods")
-async def api_pods(namespace: Optional[str] = None):
+async def api_pods(namespace: Optional[str] = None, cloud: Optional[str] = None, region: Optional[str] = None):
+    c_v1, _ = get_clients(cloud or "", region or "")
     namespaces = [namespace] if namespace else [
-        ns.metadata.name for ns in core_v1.list_namespace().items
+        ns.metadata.name for ns in c_v1.list_namespace().items
         if ns.metadata.name not in EXCLUDE_NAMESPACES
     ]
     pods_data = []
     for ns in namespaces:
         try:
-            pods = core_v1.list_namespaced_pod(ns)
+            pods = c_v1.list_namespaced_pod(ns)
             for pod in pods.items:
                 pods_data.append(classify_pod(pod))
         except Exception:

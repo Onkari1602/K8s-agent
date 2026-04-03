@@ -1,0 +1,90 @@
+name: Deploy K8s Self-Healing Agent
+
+on:
+  push:
+    branches:
+      - main
+      - claude/deploy-to-production-5XukF
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  CLUSTER_NAME: atlas-api-manager-eks-cluster
+  NAMESPACE: atlas-dev
+  AGENT_REPO: k8s-healing-agent
+  DASHBOARD_REPO: k8s-healing-dashboard
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build & push agent image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ steps.tag.outputs.IMAGE_TAG }}
+        run: |
+          docker build -t $ECR_REGISTRY/$AGENT_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$AGENT_REPO:latest .
+          docker push $ECR_REGISTRY/$AGENT_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$AGENT_REPO:latest
+
+      - name: Build & push dashboard image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ steps.tag.outputs.IMAGE_TAG }}
+        run: |
+          docker build -t $ECR_REGISTRY/$DASHBOARD_REPO:$IMAGE_TAG -t $ECR_REGISTRY/$DASHBOARD_REPO:latest ./dashboard
+          docker push $ECR_REGISTRY/$DASHBOARD_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$DASHBOARD_REPO:latest
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Deploy with Helm
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ steps.tag.outputs.IMAGE_TAG }}
+        run: |
+          helm upgrade --install k8s-healing-agent ./helm/k8s-healing-agent \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set agent.image.repository=$ECR_REGISTRY/$AGENT_REPO \
+            --set agent.image.tag=$IMAGE_TAG \
+            --set dashboard.image.repository=$ECR_REGISTRY/$DASHBOARD_REPO \
+            --set dashboard.image.tag=$IMAGE_TAG \
+            --set cognito.clientSecret=${{ secrets.COGNITO_CLIENT_SECRET }} \
+            --wait --timeout 120s
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/k8s-healing-agent-depl -n $NAMESPACE --timeout=120s
+          kubectl rollout status deployment/healing-dashboard-depl -n $NAMESPACE --timeout=120s
+
+      - name: Print dashboard URL
+        run: |
+          echo "Dashboard: https://$(kubectl get ingress -n $NAMESPACE healing-dashboard-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo 'N/A')"
+          kubectl get pods -n $NAMESPACE -l "app in (k8s-healing-agent, healing-dashboard)"
